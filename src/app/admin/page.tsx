@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Database, FileSpreadsheet, FolderPlus, History, Plus, RotateCcw, ScrollText, Trash2, UserPlus, Users } from "lucide-react";
 import { Button, Card, CardHeader, Input, Select } from "@/components/ui";
 import { listMembers, createMember, updateMember, deleteMember, listImports, exportProjects, subscribe, resetToDefaultMembers, TEAMS, TEAM_LABEL, type TeamKey, type Member, type ImportLog } from "@/lib/store";
-import { buildProgressWorkbook } from "@/lib/excel";
+import { buildProgressWorkbook, buildMembersWorkbook, parseMembersSheet } from "@/lib/excel";
 
 export default function AdminPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -16,6 +16,8 @@ export default function AdminPage() {
   const [bulkText, setBulkText] = useState("");
   const [bulkDefaultTeam, setBulkDefaultTeam] = useState<TeamKey>("A");
   const [bulkMsg, setBulkMsg] = useState("");
+  const memberFileRef = useRef<HTMLInputElement>(null);
+  const [memberImportMsg, setMemberImportMsg] = useState("");
 
   const load = useCallback(() => {
     setMembers(listMembers());
@@ -98,6 +100,53 @@ export default function AdminPage() {
     setBulkText("");
     setBulkMsg(`已添加 ${added} 人${skipped ? `，跳过 ${skipped} 个重复或空行` : ""}`);
     load();
+  }
+
+  async function handleImportMembers(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMemberImportMsg("解析中…");
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const parsed = await parseMembersSheet(buf);
+      if (!parsed.members.length) {
+        setMemberImportMsg(`❌ 解析失败：${parsed.errors[0] ?? "未识别到成员"}`);
+        return;
+      }
+      const existing = new Set(members.map((m) => m.name));
+      let added = 0;
+      let skipped = 0;
+      for (const m of parsed.members) {
+        if (existing.has(m.name)) {
+          skipped++;
+          continue;
+        }
+        createMember(m.name, m.team);
+        existing.add(m.name);
+        added++;
+      }
+      const errTail = parsed.errors.length ? `（${parsed.errors.length} 行组别无法识别）` : "";
+      setMemberImportMsg(`✅ 已导入 ${added} 人，跳过 ${skipped} 个重名${errTail}`);
+      load();
+    } catch (err) {
+      setMemberImportMsg(`❌ 读取失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      // 清空 input 以便重复导入同名文件
+      if (memberFileRef.current) memberFileRef.current.value = "";
+    }
+  }
+
+  async function downloadMembersTemplate() {
+    const buf = await buildMembersWorkbook();
+    const blob = new Blob([buf as BlobPart], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "成员名单模板.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function downloadAll() {
@@ -190,14 +239,45 @@ export default function AdminPage() {
 
           <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
             <summary className="flex cursor-pointer items-center gap-1 text-sm font-medium text-slate-700">
-              <UserPlus className="h-4 w-4" /> 批量导入成员
+              <FileSpreadsheet className="h-4 w-4" /> 从 Excel 导入成员
+            </summary>
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-slate-500">
+                上传一份成员名单 Excel（工作表名"成员名单"，首行表头"姓名"和"组别"，组别填：项目组 A 组 / 项目组 B 组 / 项目组 C 组 / 质安组 / 售后组）。
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={memberFileRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleImportMembers}
+                  className="block w-full max-w-xs rounded-md border bg-white p-1.5 text-sm file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-2 file:py-1 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <Button variant="secondary" onClick={downloadMembersTemplate}>
+                  <FileSpreadsheet className="h-4 w-4" /> 下载模板
+                </Button>
+                {memberImportMsg && (
+                  <span className={`text-xs ${memberImportMsg.startsWith("✅") ? "text-green-700" : "text-red-600"}`}>
+                    {memberImportMsg}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400">
+                组别识别：<code className="rounded bg-slate-100 px-1">项目组 A 组</code>、<code className="rounded bg-slate-100 px-1">项目组 B 组</code>、<code className="rounded bg-slate-100 px-1">项目组 C 组</code>、<code className="rounded bg-slate-100 px-1">质安组</code>、<code className="rounded bg-slate-100 px-1">售后组</code>；重名自动跳过。
+              </p>
+            </div>
+          </details>
+
+          <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <summary className="flex cursor-pointer items-center gap-1 text-sm font-medium text-slate-700">
+              <UserPlus className="h-4 w-4" /> 手动添加（应急用）
             </summary>
             <div className="mt-3 space-y-2">
               <textarea
                 value={bulkText}
                 onChange={(e) => setBulkText(e.target.value)}
-                rows={5}
-                placeholder={"每行一个名字，或用 顿号/逗号/分号 分隔\n例：\n张三 [A组]\n李四、王五 [B组]\n赵六 [质安组]\n周飞明 [C组]\n默认分组："}
+                rows={3}
+                placeholder={"每行一个名字，或用 顿号/逗号/分号 分隔\n例：\n张三 [A组]\n李四、王五 [B组]"}
                 className="w-full rounded-md border bg-white p-2 text-sm outline-none focus:border-blue-500"
               />
               <div className="flex flex-wrap items-center gap-2">
@@ -208,13 +288,10 @@ export default function AdminPage() {
                   options={TEAMS.map((t) => ({ value: t, label: TEAM_LABEL[t] }))}
                 />
                 <Button variant="secondary" onClick={batchImport} disabled={!bulkText.trim()}>
-                  <UserPlus className="h-4 w-4" /> 批量添加
+                  <UserPlus className="h-4 w-4" /> 添加
                 </Button>
                 {bulkMsg && <span className="text-xs text-slate-600">{bulkMsg}</span>}
               </div>
-              <p className="text-xs text-slate-400">
-                支持写法：<code className="rounded bg-slate-100 px-1">张三</code>、<code className="rounded bg-slate-100 px-1">张三 [项目组]</code>；名字重复会自动跳过。
-              </p>
             </div>
           </details>
           <div className="overflow-x-auto">

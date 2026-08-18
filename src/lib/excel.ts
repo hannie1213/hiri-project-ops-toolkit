@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { parseDate } from "./utils";
+import type { TeamKey } from "./store";
 
 export const TARGET_SHEET = "所有项目进度计划情况";
 
@@ -95,6 +96,102 @@ function isSubHeaderCol(text: string): boolean {
   const k = headerKey(text);
   if (!k) return false;
   return /^(计划|实际)(时间|日期)?$/.test(k);
+}
+
+/**
+ * 解析"成员名单"工作表
+ * 表头预期：姓名 + 组别（A 组 / B 组 / C 组 / 质安组 / 售后组）
+ * 工作表名默认"成员名单"，找不到则取第一个工作表
+ */
+export async function parseMembersSheet(buffer: Uint8Array): Promise<{
+  ok: boolean;
+  added: number;
+  skipped: number;
+  errors: string[];
+  members: Array<{ name: string; team: TeamKey }>;
+}> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+
+  const sheet = workbook.getWorksheet("成员名单") ?? workbook.worksheets[0];
+  if (!sheet) {
+    return { ok: false, added: 0, skipped: 0, errors: ["未找到成员名单工作表"], members: [] };
+  }
+
+  // 找表头行：扫前 10 行，找"姓名"和"组别"两列
+  let headerRow = 0;
+  let nameCol = 0;
+  let teamCol = 0;
+  for (let r = 1; r <= Math.min(10, sheet.rowCount); r++) {
+    const row = sheet.getRow(r);
+    let foundName = 0;
+    let foundTeam = 0;
+    row.eachCell((cell, colNumber) => {
+      const v = String(cell.value ?? "").replace(/\s+/g, "");
+      if (/(姓名|名字|人员|成员)/.test(v)) {
+        foundName = colNumber;
+      }
+      if (/(组别|分组|项目组|团队|大组)/.test(v)) {
+        foundTeam = colNumber;
+      }
+    });
+    if (foundName && foundTeam) {
+      headerRow = r;
+      nameCol = foundName;
+      teamCol = foundTeam;
+      break;
+    }
+  }
+
+  if (!headerRow) {
+    return {
+      ok: false,
+      added: 0,
+      skipped: 0,
+      errors: ["找不到包含「姓名」和「组别」的表头行"],
+      members: [],
+    };
+  }
+
+  const result: Array<{ name: string; team: TeamKey }> = [];
+  const errors: string[] = [];
+  let skipped = 0;
+
+  const TEAM_MAP: Record<string, TeamKey> = {
+    A组: "A",
+    "项目组A组": "A",
+    "项目组 A 组": "A",
+    A: "A",
+    B组: "B",
+    "项目组B组": "B",
+    "项目组 B 组": "B",
+    B: "B",
+    C组: "C",
+    "项目组C组": "C",
+    "项目组 C 组": "C",
+    C: "C",
+    质安组: "QA",
+    QA: "QA",
+    售后组: "AFTERSALES",
+    AFTERSALES: "AFTERSALES",
+  };
+
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber <= headerRow) return;
+    const rawName = String(row.getCell(nameCol).value ?? "").trim();
+    const rawTeam = String(row.getCell(teamCol).value ?? "").trim();
+    if (!rawName) return;
+    const normTeam = rawTeam.replace(/\s+/g, "");
+    const team = TEAM_MAP[normTeam] ?? TEAM_MAP[rawTeam];
+    if (!team) {
+      errors.push(`第 ${rowNumber} 行「${rawName}」组别「${rawTeam}」无法识别`);
+      skipped++;
+      return;
+    }
+    result.push({ name: rawName, team });
+  });
+
+  return { ok: errors.length === 0 || result.length > 0, added: result.length, skipped, errors, members: result };
 }
 
 /**
@@ -532,5 +629,53 @@ export async function buildMergeWorkbook(
   }
 
   const buffer = await wb.xlsx.writeBuffer();
+  return new Uint8Array(buffer);
+}
+
+
+/** 生成"成员名单"导入模板 Excel（成员用，姓名 + 组别两列） */
+export async function buildMembersWorkbook(rows: Array<{ name: string; team: TeamKey }> = []): Promise<Uint8Array> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "项目管理系统";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("成员名单", { views: [{ state: "frozen", ySplit: 1 }] });
+  sheet.getColumn(1).width = 16;
+  sheet.getColumn(2).width = 20;
+  sheet.getColumn(3).width = 30;
+  const headRow = sheet.getRow(1);
+  headRow.values = ["姓名", "组别", "备注（可选）"];
+  headRow.eachCell((c) => {
+    c.font = { bold: true };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE7F0FA" } };
+    c.alignment = { horizontal: "center", vertical: "middle" };
+    c.border = { bottom: { style: "thin" } };
+  });
+  sheet.getRow(1).height = 22;
+
+  const TEAM_LABEL_MAP: Record<TeamKey, string> = {
+    A: "项目组 A 组",
+    B: "项目组 B 组",
+    C: "项目组 C 组",
+    QA: "质安组",
+    AFTERSALES: "售后组",
+  };
+
+  if (rows.length === 0) {
+    // 给一份样例数据
+    sheet.addRow(["张三", "项目组 A 组", ""]);
+    sheet.addRow(["李四", "项目组 B 组", ""]);
+    sheet.addRow(["王五", "质安组", ""]);
+  } else {
+    for (const r of rows) {
+      sheet.addRow([r.name, TEAM_LABEL_MAP[r.team] || "", ""]);
+    }
+  }
+
+  // 加一列说明（备注右侧）
+  sheet.getCell("D1").value = "组别可选值（按你给的名单填写）";
+  sheet.getCell("D1").font = { italic: true, color: { argb: "FF64748B" } };
+  sheet.addRow(["项目组 A 组", "项目组 B 组", "项目组 C 组", "质安组", "售后组"]);
+
+  const buffer = await workbook.xlsx.writeBuffer();
   return new Uint8Array(buffer);
 }

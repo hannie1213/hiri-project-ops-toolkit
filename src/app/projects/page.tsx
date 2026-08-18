@@ -217,7 +217,7 @@ function ProjectRowView({ p }: { p: ProjectRow }) {
         </div>
       </td>
       <td className="px-4 py-3 text-xs">
-        <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">{groupLabel}</span>
+        <span className="inline-block whitespace-nowrap rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">{groupLabel}</span>
       </td>
       <td className="px-4 py-3">
         <StatusBadge status={p.status} />
