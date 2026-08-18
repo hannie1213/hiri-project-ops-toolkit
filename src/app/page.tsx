@@ -160,7 +160,7 @@ export default function DashboardPage() {
                     节点「{r.milestone.name}」计划 {r.milestone.plannedDate || "—"} 已逾期 {r.milestone.lateDays ?? 0} 天
                   </div>
                 </div>
-                <span className="shrink-0 text-xs text-slate-400">PM: {r.pm}</span>
+                <span className="shrink-0 text-xs text-slate-400">负责人：{r.pm}</span>
               </Link>
             ))}
           </div>

@@ -116,7 +116,7 @@ export default function RemindersPage() {
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-slate-800">{i.projectName}</div>
                     <div className="mt-0.5 text-xs text-slate-500">
-                      {i.milestoneName} · 计划 {i.plannedDate} · PM：{i.pmList.join("、") || "—"}
+                      {i.milestoneName} · 计划 {i.plannedDate} · 负责人：{i.pmList.join("、") || "—"}
                     </div>
                   </div>
                   <span className={`ml-3 shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${BUCKET_STYLE[g.bucket]}`}>

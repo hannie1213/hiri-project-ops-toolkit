@@ -135,14 +135,7 @@ export function listProjects(): Project[] {
   const normalized = raw.map((p) => {
     if (p.team === undefined || p.subTeam === undefined) {
       migrated = true;
-      const managers = syncManagers(p.pmRaw);
-      const resolved = resolveTeamByPM(managers);
-      return {
-        ...p,
-        managers,
-        team: resolved?.team ?? null,
-        subTeam: resolved?.subTeam ?? "NONE",
-      };
+      return { ...p, team: p.team ?? null, subTeam: p.subTeam ?? "NONE" };
     }
     return p;
   });
@@ -176,26 +169,14 @@ function syncManagers(pmRaw: string | null): string[] {
   return Array.from(new Set(splitPm(pmRaw).map((s) => s.trim()).filter(Boolean)));
 }
 
-/** 根据 PM 名字推断所属大组/子组（查成员名单），找不到返回 null */
-function resolveTeamByPM(pmNames: string[]): { team: TeamKey; subTeam: SubTeamKey } | null {
-  if (pmNames.length === 0) return null;
-  const members = read<Member[]>(KEYS.members, []);
-  for (const name of pmNames) {
-    const m = members.find((x) => x.name === name && x.active);
-    if (m) return { team: m.team, subTeam: m.subTeam };
-  }
-  return null;
-}
-
 function refreshStatus(p: Project): Project {
-  // evaluateProject 已在 evaluate() 中计算，这里确保 managers 同步，并按 PM 推断 team/subTeam
-  const managers = syncManagers(p.pmRaw);
-  const resolved = resolveTeamByPM(managers);
+  // evaluateProject 已在 evaluate() 中计算，这里仅确保 managers 与 pmRaw 同步
+  // team/subTeam 由管理员在表单中手动指定，不做自动推断
   return {
     ...p,
-    managers,
-    team: p.team ?? resolved?.team ?? null,
-    subTeam: p.subTeam ?? resolved?.subTeam ?? "NONE",
+    managers: syncManagers(p.pmRaw),
+    team: p.team ?? null,
+    subTeam: p.subTeam ?? "NONE",
   };
 }
 

@@ -136,7 +136,7 @@ function ProjectsPageInner() {
           <div className="relative min-w-40 flex-1">
             <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
-              placeholder="按 PM 名字筛选…"
+              placeholder="按负责人名字筛选…"
               value={pmName}
               onChange={(v) => setPmName(v)}
               className="pl-9"
@@ -180,7 +180,7 @@ function ProjectsPageInner() {
               <tr className="border-b bg-slate-50 text-xs text-slate-500">
                 <th className="px-4 py-3 font-medium">项目名称</th>
                 <th className="px-4 py-3 font-medium">编号</th>
-                <th className="px-4 py-3 font-medium">负责人(PM)</th>
+                <th className="px-4 py-3 font-medium">负责人</th>
                 <th className="px-4 py-3 font-medium">所属组</th>
                 <th className="px-4 py-3 font-medium">状态</th>
                 <th className="px-4 py-3 font-medium">进度节点</th>

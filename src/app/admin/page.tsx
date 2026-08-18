@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Database, FileSpreadsheet, FolderPlus, History, Plus, ScrollText, Sparkles, Trash2, UserPlus, Users } from "lucide-react";
+import { Database, FileSpreadsheet, FolderPlus, History, Plus, ScrollText, Trash2, UserPlus, Users } from "lucide-react";
 import { Button, Card, CardHeader, Input, Select } from "@/components/ui";
-import { listMembers, createMember, updateMember, deleteMember, listImports, listProjects, exportProjects, subscribe, TEAMS, TEAM_LABEL, SUBTEAM_LABEL, SUB_TEAMS, type TeamKey, type SubTeamKey, type Member, type ImportLog } from "@/lib/store";
+import { listMembers, createMember, updateMember, deleteMember, listImports, exportProjects, subscribe, TEAMS, TEAM_LABEL, SUBTEAM_LABEL, SUB_TEAMS, type TeamKey, type SubTeamKey, type Member, type ImportLog } from "@/lib/store";
 import { buildProgressWorkbook } from "@/lib/excel";
-import { splitPm } from "@/lib/utils";
 
 export default function AdminPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -101,29 +100,6 @@ export default function AdminPage() {
     }
     setBulkText("");
     setBulkMsg(`已添加 ${added} 人${skipped ? `，跳过 ${skipped} 个重复或空行` : ""}`);
-    load();
-  }
-
-  // 从已导入项目的 PM 字段提取所有人，加入成员名单（默认项目组 A 组）
-  function importFromProjects() {
-    const projects = listProjects();
-    const existing = new Set(members.map((m) => m.name));
-    const seen = new Set<string>();
-    let added = 0;
-    let skipped = 0;
-    for (const p of projects) {
-      const names = splitPm(p.pmRaw || "").map((s) => s.trim()).filter(Boolean);
-      for (const n of names) {
-        if (seen.has(n) || existing.has(n)) {
-          skipped++;
-          continue;
-        }
-        seen.add(n);
-        createMember(n, "PROJECT", "A");
-        added++;
-      }
-    }
-    setBulkMsg(`从 ${projects.length} 个项目提取，新增成员 ${added} 人${skipped ? `，跳过 ${skipped} 个重复` : ""}`);
     load();
   }
 
@@ -252,16 +228,6 @@ export default function AdminPage() {
               </p>
             </div>
           </details>
-
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-            <Sparkles className="h-4 w-4 text-blue-600" />
-            <span className="text-xs text-slate-700">
-              Excel 里通常只写"项目 PM"，不会写周报成员。可一键从已导入项目里把负责人提取为成员（默认归入"项目组"，重复自动跳过）。
-            </span>
-            <Button variant="secondary" onClick={importFromProjects}>
-              <Sparkles className="h-4 w-4" /> 从项目 PM 一键提取
-            </Button>
-          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
