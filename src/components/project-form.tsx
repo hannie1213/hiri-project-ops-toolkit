@@ -16,6 +16,12 @@ export type ProjectFormValue = {
   name: string;
   code: string;
   category: string;
+  contractType: string;
+  contractSignedDate: string;
+  contractAmount: string;
+  upstreamUnit: string;
+  marketOwner: string;
+  currentStatus: string;
   pmRaw: string;
   team: TeamKey | null;
   startDate: string;
@@ -72,8 +78,8 @@ export default function ProjectForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!form.name.trim()) {
-      setError("项目名称不能为空");
+    if (!form.code.trim() || !form.name.trim() || !form.pmRaw.trim()) {
+      setError("项目编号、项目名称、项目经理均为必填项");
       return;
     }
     const milestoneNames = form.milestones.map((m) => m.name.trim()).filter(Boolean);
@@ -103,15 +109,21 @@ export default function ProjectForm({
           <Field label="项目名称 *">
             <Input value={form.name} onChange={(v) => set("name", v)} placeholder="请输入项目名称" />
           </Field>
-          <Field label="项目编号">
-            <Input value={form.code} onChange={(v) => set("code", v)} placeholder="可选" />
+          <Field label="项目编号 *">
+            <Input value={form.code} onChange={(v) => set("code", v)} placeholder="请输入项目编号" />
           </Field>
           <Field label="分类 / 产品线">
             <Input value={form.category} onChange={(v) => set("category", v)} placeholder="如：政务、金融…" />
           </Field>
-          <Field label="负责人" desc="多人用 / 、 ， , ; 分隔，自动拆分">
+          <Field label="项目经理 *" desc="多人用 / ／ 、 ， , ; 换行分隔">
             <Input value={form.pmRaw} onChange={(v) => set("pmRaw", v)} placeholder="张三/李四、王五" />
           </Field>
+          <Field label="合同类型"><Input value={form.contractType} onChange={(v) => set("contractType", v)} /></Field>
+          <Field label="合同签订日期"><Input type="date" value={form.contractSignedDate} onChange={(v) => set("contractSignedDate", v)} /></Field>
+          <Field label="合同金额"><Input value={form.contractAmount} onChange={(v) => set("contractAmount", v)} placeholder="可保留单位或文本格式" /></Field>
+          <Field label="上家单位"><Input value={form.upstreamUnit} onChange={(v) => set("upstreamUnit", v)} /></Field>
+          <Field label="市场负责人"><Input value={form.marketOwner} onChange={(v) => set("marketOwner", v)} /></Field>
+          <Field label="当前项目状态"><Input value={form.currentStatus} onChange={(v) => set("currentStatus", v)} placeholder="如：实施中、暂停、已验收" /></Field>
           <Field label="所属项目组" desc="用于项目管理按组筛选">
             <Select
               value={form.team ?? "NONE"}

@@ -78,7 +78,7 @@ export function diffDays(date: Date, base: Date): number {
 export function splitPm(raw: string): string[] {
   if (!raw) return [];
   return raw
-    .split(/[/、，,;；\n\r]+/)
+    .split(/[/／、，,;；\n\r]+/)
     .map((s) => s.trim())
     .filter(Boolean);
 }

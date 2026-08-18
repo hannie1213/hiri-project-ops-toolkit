@@ -7,7 +7,7 @@ import { AlertTriangle, ArrowLeft, CalendarDays, CheckCircle2, Pencil, RefreshCw
 import { Button, Card, CardHeader } from "@/components/ui";
 import { StatusBadge } from "@/components/ui/badge";
 import ProjectForm, { type ProjectFormValue } from "@/components/project-form";
-import { getProject, evaluate, updateProject, deleteProject, subscribe, type TeamKey } from "@/lib/store";
+import { getProject, evaluate, updateProject, deleteProject, subscribe, TEAM_LABEL, type TeamKey } from "@/lib/store";
 import { fmtDate } from "@/lib/utils";
 
 type DetailView = {
@@ -15,6 +15,12 @@ type DetailView = {
   name: string;
   code: string | null;
   category: string | null;
+  contractType: string | null;
+  contractSignedDate: string | null;
+  contractAmount: string | null;
+  upstreamUnit: string | null;
+  marketOwner: string | null;
+  currentStatus: string | null;
   pmRaw: string | null;
   pmList: string[];
   team: TeamKey | null;
@@ -53,6 +59,12 @@ function toView(id: string): DetailView | null {
     name: p.name,
     code: p.code,
     category: p.category,
+    contractType: p.contractType ?? null,
+    contractSignedDate: p.contractSignedDate ?? null,
+    contractAmount: p.contractAmount ?? null,
+    upstreamUnit: p.upstreamUnit ?? null,
+    marketOwner: p.marketOwner ?? null,
+    currentStatus: p.currentStatus ?? null,
     pmRaw: p.pmRaw,
     pmList: p.managers,
     team: p.team,
@@ -114,6 +126,12 @@ function ProjectDetailInner() {
         name: v.name,
         code: v.code,
         category: v.category,
+        contractType: v.contractType,
+        contractSignedDate: v.contractSignedDate || null,
+        contractAmount: v.contractAmount,
+        upstreamUnit: v.upstreamUnit,
+        marketOwner: v.marketOwner,
+        currentStatus: v.currentStatus,
         pmRaw: v.pmRaw,
         team: v.team,
         startDate: v.startDate || null,
@@ -133,7 +151,7 @@ function ProjectDetailInner() {
   }
 
   function handleDelete() {
-    if (!confirm(`确认删除项目「${data?.name}」？此操作不可恢复。`)) return;
+    if (!confirm(`确认将项目「${data?.name}」移入已删除项目？之后可在数据管理中恢复。`)) return;
     deleteProject(id);
     router.push("/projects");
   }
@@ -167,7 +185,7 @@ function ProjectDetailInner() {
         <div className="flex items-center gap-2">
           {!editing && (
             <Button variant="secondary" onClick={() => setEditing(true)}>
-              <Pencil className="h-4 w-4" /> 编辑
+              <Pencil className="h-4 w-4" /> 编辑项目资料与节点
             </Button>
           )}
           <Button variant="danger" onClick={handleDelete}>
@@ -183,6 +201,12 @@ function ProjectDetailInner() {
               name: data.name,
               code: data.code ?? "",
               category: data.category ?? "",
+              contractType: data.contractType ?? "",
+              contractSignedDate: data.contractSignedDate?.slice(0, 10) ?? "",
+              contractAmount: data.contractAmount ?? "",
+              upstreamUnit: data.upstreamUnit ?? "",
+              marketOwner: data.marketOwner ?? "",
+              currentStatus: data.currentStatus ?? "",
               pmRaw: data.pmRaw ?? "",
               team: data.team,
               startDate: data.startDate ? data.startDate.slice(0, 10) : "",
@@ -222,7 +246,7 @@ function ProjectDetailInner() {
                   {data.category && <span>分类：{data.category}</span>}
                   <span className="flex items-center gap-1">
                     <Users className="h-4 w-4" />
-                    负责人：{data.pmList.length > 0 ? data.pmList.join("、") : data.pmRaw || "未指定"}
+                    项目经理：{data.pmRaw || "未指定"}
                   </span>
                   <span className="flex items-center gap-1">
                     <CalendarDays className="h-4 w-4" />
@@ -260,7 +284,7 @@ function ProjectDetailInner() {
                 </thead>
                 <tbody className="divide-y">
                   {data.evaluate.milestoneStatus.map((m, i) => (
-                    <tr key={i} className={m.hasDateIssue ? "bg-red-50/50" : ""}>
+                    <tr key={i} className={m.hasDateIssue ? "bg-purple-50/50" : ""}>
                       <td className="px-4 py-3 font-medium text-slate-800">
                         {m.name}
                         {m.isAcceptance && (
@@ -288,7 +312,7 @@ function ProjectDetailInner() {
               <span className="absolute left-[27px] top-5 bottom-5 w-px bg-slate-200" />
               {data.evaluate.milestoneStatus.map((m, i) => {
                 const dotColor = m.hasDateIssue
-                  ? "bg-red-500"
+                  ? "bg-purple-500"
                   : m.actualDate
                   ? "bg-green-500"
                   : m.isPlannedPassed
@@ -330,7 +354,7 @@ function ProjectDetailInner() {
                                   return diff > 0 ? `+${diff} 天（滞后）` : `${diff} 天（提前）`;
                                 })()
                               : m.actualMissing && m.isPlannedPassed && m.lateDays != null
-                              ? `已逾期 ${m.lateDays} 天`
+                              ? `计划已过 ${m.lateDays} 天（待确认）`
                               : m.remainingDays != null
                               ? `距计划 ${m.remainingDays} 天`
                               : "—"}
@@ -360,6 +384,14 @@ function ProjectDetailInner() {
                 <dt className="text-xs text-slate-400">分类</dt>
                 <dd className="text-slate-700">{data.category || "—"}</dd>
               </div>
+              <div><dt className="text-xs text-slate-400">合同类型</dt><dd className="text-slate-700">{data.contractType || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-400">合同签订日期</dt><dd className="text-slate-700">{data.contractSignedDate ? fmt(data.contractSignedDate) : "—"}</dd></div>
+              <div><dt className="text-xs text-slate-400">合同金额</dt><dd className="text-slate-700">{data.contractAmount || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-400">上家单位</dt><dd className="text-slate-700">{data.upstreamUnit || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-400">市场负责人</dt><dd className="text-slate-700">{data.marketOwner || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-400">当前项目状态</dt><dd className="text-slate-700">{data.currentStatus || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-400">项目组</dt><dd className="text-slate-700">{data.team ? TEAM_LABEL[data.team] : "—"}</dd></div>
+              <div><dt className="text-xs text-slate-400">完整项目经理</dt><dd className="text-slate-700">{data.pmRaw || "—"}</dd></div>
               <div>
                 <dt className="text-xs text-slate-400">数据来源</dt>
                 <dd className="text-slate-700">

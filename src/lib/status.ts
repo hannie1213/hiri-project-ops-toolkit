@@ -1,274 +1,99 @@
-// ============================================================
-// 核心状态规则引擎（纯函数，无副作用，便于单元测试）
-//
-// 验收规则（20条）要点：
-//   R1  实际日期为空 ≠ 逾期，节点展示"待补实际日期"
-//   R2  非验收节点计划日期已过且无实际日期 → 项目"有延期风险"
-//   R3  项目是否完成只看"验收"节点实际日期（验收终审）
-//   R4  已验收项目从跟进/提醒中排除
-//   R5  7/14/30/60 天临近窗口提醒
-//   R6  数据错误（实际日期早于计划日期、无计划日期却有实际日期等）→ "日期待核对"
-//   R7  多PM按分隔符拆分
-// ============================================================
+export type ProjectStatus = "ACCEPTANCE_LATE" | "ACCEPTANCE_ON_TIME" | "DATE_ISSUE" | "LATE_RISK" | "PENDING_ACTUAL" | "ON_TRACK" | "NOT_STARTED";
 
 export type MilestoneView = {
-  id: string;
-  name: string;
-  order: number;
-  plannedDate: Date | null;
-  actualDate: Date | null;
-  remark?: string | null;
-  isAcceptance: boolean; // 是否验收节点
-  hasDateIssue: boolean; // 是否日期待核对
-  dateIssueReason: string | null;
-  isPlannedPassed: boolean; // 计划日期已过（且无实际日期）
-  actualMissing: boolean; // 实际日期为空
-  lateDays: number | null; // 延期天数（计划日期已过且无实际日期）
-  remainingDays: number | null; // 距计划日期剩余天数
+  id: string; name: string; order: number; plannedDate: Date | null; actualDate: Date | null;
+  isAcceptance: boolean; hasDateIssue: boolean; dateIssueReason: string | null;
+  isPlannedPassed: boolean; actualMissing: boolean; lateDays: number | null;
+  remainingDays: number | null; completedLate: boolean;
 };
 
 export type ProjectStatusInfo = {
-  status: "ACCEPTED" | "DATE_ISSUE" | "LATE_RISK" | "PENDING_ACTUAL" | "NO_PLAN" | "ON_TRACK" | "NOT_STARTED";
-  label: string;
-  milestoneStatus: MilestoneView[];
-  accepted: boolean; // 已验收（被排除在跟进之外）
-  hasDateIssue: boolean;
-  hasLateRisk: boolean;
-  hasPendingActual: boolean;
-  warning: string | null;
+  status: ProjectStatus; label: string; milestoneStatus: MilestoneView[]; accepted: boolean;
+  acceptanceResult: "验收延期完成" | "按时验收" | "尚未验收";
+  hasDateIssue: boolean; hasLateRisk: boolean; hasPendingActual: boolean; warning: string | null;
 };
 
-/** 验收节点名集合（含别名） */
 const ACCEPTANCE_NAMES = ["验收", "终验", "结题", "竣工验收", "交付验收"];
+export function isAcceptanceNode(name: string): boolean { return ACCEPTANCE_NAMES.some((item) => name.includes(item)); }
 
-export function isAcceptanceNode(name: string): boolean {
-  return ACCEPTANCE_NAMES.some((a) => name.includes(a));
-}
-
-/** 计算单节点状态 */
 export function evaluateMilestone(
-  m: { id?: string; name: string; order: number; plannedDate: Date | null; actualDate: Date | null; remark?: string | null },
+  m: { id?: string; name: string; order: number; plannedDate: Date | null; actualDate: Date | null; dateIssueReason?: string | null },
   today: Date = new Date()
 ): MilestoneView {
-  const name = m.name || "";
-  const isAcceptance = isAcceptanceNode(name);
-
-  // 日期核对规则
-  let hasDateIssue = false;
-  let dateIssueReason: string | null = null;
-  if (m.actualDate && m.plannedDate) {
-    if (m.actualDate.getTime() < m.plannedDate.getTime()) {
-      hasDateIssue = true;
-      dateIssueReason = "实际日期早于计划日期";
-    }
-  }
-  if (m.actualDate && !m.plannedDate) {
-    hasDateIssue = true;
-    dateIssueReason = "有实际日期但无计划日期";
-  }
-  // 未来实际日期也视为可疑（提前录入超过合理范围，这里仅标记提醒）
-  if (m.actualDate && m.actualDate.getTime() > today.getTime()) {
-    hasDateIssue = true;
-    dateIssueReason = "实际日期晚于今天";
-  }
-
-  const actualMissing = !m.actualDate;
-  const isPlannedPassed = !!m.plannedDate && m.plannedDate.getTime() < startOfDay(today).getTime();
-  const lateDays =
-    actualMissing && m.plannedDate && isPlannedPassed ? diffDays(startOfDay(today), startOfDay(m.plannedDate)) : null;
-  const remainingDays =
-    !actualMissing || !m.plannedDate ? null : diffDays(startOfDay(m.plannedDate), startOfDay(today));
-
+  const planned = m.plannedDate ? startOfDay(m.plannedDate) : null;
+  const actual = m.actualDate ? startOfDay(m.actualDate) : null;
+  const base = startOfDay(today);
+  const actualMissing = !actual;
+  const isPlannedPassed = !!planned && planned.getTime() < base.getTime();
   return {
-    id: m.id || `milestone-${name}-${m.order}`,
-    name,
-    order: m.order,
-    plannedDate: m.plannedDate,
-    actualDate: m.actualDate,
-    remark: m.remark ?? null,
-    isAcceptance,
-    hasDateIssue,
-    dateIssueReason,
-    isPlannedPassed,
-    actualMissing,
-    lateDays,
-    remainingDays,
+    id: m.id || `milestone-${m.name}-${m.order}`, name: m.name || "未命名节点", order: m.order,
+    plannedDate: planned, actualDate: actual, isAcceptance: isAcceptanceNode(m.name || ""),
+    hasDateIssue: !!m.dateIssueReason, dateIssueReason: m.dateIssueReason ?? null,
+    isPlannedPassed, actualMissing,
+    lateDays: actualMissing && planned && isPlannedPassed ? diffDays(base, planned) : null,
+    remainingDays: actualMissing && planned ? diffDays(planned, base) : null,
+    completedLate: !!planned && !!actual && actual.getTime() > planned.getTime(),
   };
 }
 
-/** 计算项目整体状态 */
 export function evaluateProject(
-  milestones: Array<{ name: string; order: number; plannedDate: Date | null; actualDate: Date | null; remark?: string | null }>,
+  milestones: Array<{ id?: string; name: string; order: number; plannedDate: Date | null; actualDate: Date | null; dateIssueReason?: string | null }>,
   today: Date = new Date()
 ): ProjectStatusInfo {
   const views = milestones.map((m) => evaluateMilestone(m, today));
-  const hasDateIssue = views.some((v) => v.hasDateIssue);
-
-  // R3 验收终审：只看验收节点实际日期
-  const acceptanceNode = views.find((v) => v.isAcceptance);
-  const accepted = !!acceptanceNode?.actualDate;
-
-  // 已验收项目若存在数据问题仍标"日期待核对"
-  if (hasDateIssue) {
-    return {
-      status: "DATE_ISSUE",
-      label: "日期待核对",
-      milestoneStatus: views,
-      accepted,
-      hasDateIssue,
-      hasLateRisk: false,
-      hasPendingActual: false,
-      warning: firstIssueReason(views),
-    };
-  }
-
+  const acceptance = views.find((m) => m.isAcceptance);
+  const accepted = !!acceptance?.actualDate;
+  const hasDateIssue = views.some((m) => m.hasDateIssue);
   if (accepted) {
-    return {
-      status: "ACCEPTED",
-      label: "已验收",
-      milestoneStatus: views,
-      accepted: true,
-      hasDateIssue: false,
-      hasLateRisk: false,
-      hasPendingActual: false,
-      warning: null,
-    };
+    const late = !!acceptance?.completedLate;
+    return makeResult(late ? "ACCEPTANCE_LATE" : "ACCEPTANCE_ON_TIME", late ? "验收延期完成" : "按时验收", views, true, late ? "验收延期完成" : "按时验收", hasDateIssue, false, false, late && acceptance?.plannedDate ? `验收实际日期晚于计划日期 ${diffDays(acceptance.actualDate!, acceptance.plannedDate)} 天` : null);
   }
-
-  // R2 非验收节点计划日期已过且无实际日期 → 有延期风险
-  const lateNode = views.find((v) => !v.isAcceptance && v.isPlannedPassed && v.actualMissing);
-  if (lateNode) {
-    return {
-      status: "LATE_RISK",
-      label: "有延期风险",
-      milestoneStatus: views,
-      accepted: false,
-      hasDateIssue: false,
-      hasLateRisk: true,
-      hasPendingActual: true,
-      warning: `节点「${lateNode.name}」计划 ${fmt(lateNode.plannedDate)}，已逾期 ${lateNode.lateDays ?? 0} 天，实际日期待补`,
-    };
+  if (hasDateIssue) {
+    const issue = views.find((m) => m.hasDateIssue)!;
+    return makeResult("DATE_ISSUE", "日期待核对", views, false, "尚未验收", true, false, false, `节点「${issue.name}」：${issue.dateIssueReason}`);
   }
-
-  // R0 非验收节点既无计划日期也无实际日期 → 计划待填（状态不明确，重点提示，不可跳过）
-  const noPlanNode = views.find((v) => !v.isAcceptance && !v.plannedDate && !v.actualDate);
-  if (noPlanNode) {
-    return {
-      status: "NO_PLAN",
-      label: "计划待填",
-      milestoneStatus: views,
-      accepted: false,
-      hasDateIssue: false,
-      hasLateRisk: false,
-      hasPendingActual: true,
-      warning: `节点「${noPlanNode.name}」未填写计划日期，项目状态不明确，请尽快补全计划`,
-    };
-  }
-
-  // R1 实际日期为空（有计划日期）→ 待补实际日期
-  const pendingNode = views.find((v) => v.actualMissing);
-  if (pendingNode) {
-    return {
-      status: "PENDING_ACTUAL",
-      label: "待补实际日期",
-      milestoneStatus: views,
-      accepted: false,
-      hasDateIssue: false,
-      hasLateRisk: false,
-      hasPendingActual: true,
-      warning: `节点「${pendingNode.name}」实际日期待补`,
-    };
-  }
-
-  // 全部节点均无计划日期（空项目）
-  if (views.length === 0 || views.every((v) => !v.plannedDate && !v.actualDate)) {
-    return {
-      status: "NOT_STARTED",
-      label: "未开始",
-      milestoneStatus: views,
-      accepted: false,
-      hasDateIssue: false,
-      hasLateRisk: false,
-      hasPendingActual: false,
-      warning: null,
-    };
-  }
-
-  return {
-    status: "ON_TRACK",
-    label: "正常推进",
-    milestoneStatus: views,
-    accepted: false,
-    hasDateIssue: false,
-    hasLateRisk: false,
-    hasPendingActual: false,
-    warning: null,
-  };
+  // 前置节点只有在实际日期已填写且晚于计划日期时才显示风险。
+  const lateNodes = views.filter((m) => !m.isAcceptance && m.completedLate);
+  if (lateNodes.length) return makeResult("LATE_RISK", "有延期风险", views, false, "尚未验收", false, true, views.some((m) => m.actualMissing), `前置节点${lateNodes.map((m) => `「${m.name}」`).join("、")}实际完成晚于计划；最终延期仍以验收为准`);
+  // 计划已过但实际为空只表示待补，不判断为延期。
+  const pending = views.find((m) => m.actualMissing && m.plannedDate);
+  if (pending) return makeResult("PENDING_ACTUAL", "待补实际日期", views, false, "尚未验收", false, false, true, pending.isPlannedPassed ? `节点「${pending.name}」计划日期已过，待补实际日期（不代表延期）` : `节点「${pending.name}」实际日期待补`);
+  if (!views.length || views.every((m) => !m.plannedDate && !m.actualDate)) return makeResult("NOT_STARTED", "正常", views, false, "尚未验收", false, false, false, null);
+  return makeResult("ON_TRACK", "正常", views, false, "尚未验收", false, false, false, null);
 }
 
-/** 按提醒窗口计算临近节点（已验收项目排除）。无计划日期的节点归入 noPlan 桶，不被跳过 */
-export function upcomingMilestones(
-  projectStatus: ProjectStatusInfo,
-  today: Date = new Date()
-): { 7: MilestoneView[]; 14: MilestoneView[]; 30: MilestoneView[]; 60: MilestoneView[]; noPlan: MilestoneView[] } & Record<number, MilestoneView[]> {
-  const windows = [7, 14, 30, 60];
-  const result: { 7: MilestoneView[]; 14: MilestoneView[]; 30: MilestoneView[]; 60: MilestoneView[]; noPlan: MilestoneView[] } & Record<number, MilestoneView[]> = {
-    7: [],
-    14: [],
-    30: [],
-    60: [],
-    noPlan: [],
-  };
-  if (projectStatus.accepted) return result; // R4 已验收排除
-  for (const v of projectStatus.milestoneStatus) {
-    // 计划日期缺失（且未实际完成）→ 计划待填，单独桶重点提示
-    if (v.actualMissing && !v.plannedDate && !v.isAcceptance) {
-      result.noPlan.push(v);
-      continue;
-    }
-    if (v.actualMissing && v.plannedDate) {
-      const days = diffDays(startOfDay(v.plannedDate), startOfDay(today));
-      if (days < 0) continue; // 已过期由延期风险处理
-      for (const w of windows) {
-        if (days <= w) result[w].push(v);
-      }
-    }
+function makeResult(status: ProjectStatus, label: string, milestoneStatus: MilestoneView[], accepted: boolean, acceptanceResult: ProjectStatusInfo["acceptanceResult"], hasDateIssue: boolean, hasLateRisk: boolean, hasPendingActual: boolean, warning: string | null): ProjectStatusInfo {
+  return { status, label, milestoneStatus, accepted, acceptanceResult, hasDateIssue, hasLateRisk, hasPendingActual, warning };
+}
+
+export function upcomingMilestones(projectStatus: ProjectStatusInfo, today: Date = new Date()): { 7: MilestoneView[]; 14: MilestoneView[]; 30: MilestoneView[]; 60: MilestoneView[]; noPlan: MilestoneView[] } & Record<number, MilestoneView[]> {
+  const output = { 7: [], 14: [], 30: [], 60: [], noPlan: [] } as unknown as { 7: MilestoneView[]; 14: MilestoneView[]; 30: MilestoneView[]; 60: MilestoneView[]; noPlan: MilestoneView[] } & Record<number, MilestoneView[]>;
+  if (projectStatus.accepted) return output;
+  for (const item of projectStatus.milestoneStatus) {
+    if (!item.actualMissing) continue;
+    if (!item.plannedDate) { output.noPlan.push(item); continue; }
+    const days = diffDays(item.plannedDate, startOfDay(today));
+    if (days < 0) continue;
+    for (const window of [7, 14, 30, 60]) if (days <= window) output[window].push(item);
   }
-  return result;
+  return output;
 }
 
-function firstIssueReason(views: MilestoneView[]): string {
-  const v = views.find((x) => x.hasDateIssue);
-  return v ? `节点「${v.name}」：${v.dateIssueReason}` : "存在日期数据错误";
+export function confirmationMilestones(info: ProjectStatusInfo): MilestoneView[] {
+  if (info.accepted) return [];
+  return info.milestoneStatus.filter((m) => m.actualMissing && !!m.plannedDate && m.isPlannedPassed);
 }
 
-function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-function diffDays(a: Date, b: Date): number {
-  return Math.round((a.getTime() - b.getTime()) / 86400000);
-}
-
-function fmt(d: Date | null): string {
-  if (!d) return "";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-// ============================================================
-// 展示辅助
-// ============================================================
+function startOfDay(date: Date): Date { return new Date(date.getFullYear(), date.getMonth(), date.getDate()); }
+function diffDays(a: Date, b: Date): number { return Math.round((a.getTime() - b.getTime()) / 86400000); }
 
 export const STATUS_STYLE: Record<string, { badge: string; dot: string; label: string }> = {
-  ACCEPTED: { badge: "bg-green-100 text-green-700 border-green-300", dot: "bg-green-500", label: "已验收" },
-  DATE_ISSUE: { badge: "bg-red-100 text-red-700 border-red-300", dot: "bg-red-500", label: "日期待核对" },
+  ACCEPTANCE_LATE: { badge: "bg-red-100 text-red-700 border-red-300", dot: "bg-red-500", label: "验收延期完成" },
+  ACCEPTANCE_ON_TIME: { badge: "bg-green-100 text-green-700 border-green-300", dot: "bg-green-500", label: "按时验收" },
+  DATE_ISSUE: { badge: "bg-purple-100 text-purple-700 border-purple-300", dot: "bg-purple-500", label: "日期待核对" },
   LATE_RISK: { badge: "bg-orange-100 text-orange-700 border-orange-300", dot: "bg-orange-500", label: "有延期风险" },
-  NO_PLAN: { badge: "bg-purple-100 text-purple-700 border-purple-300", dot: "bg-purple-500", label: "计划待填" },
-  PENDING_ACTUAL: { badge: "bg-amber-100 text-amber-700 border-amber-300", dot: "bg-amber-500", label: "待补实际日期" },
-  ON_TRACK: { badge: "bg-blue-100 text-blue-700 border-blue-300", dot: "bg-blue-500", label: "正常推进" },
-  NOT_STARTED: { badge: "bg-gray-100 text-gray-600 border-gray-300", dot: "bg-gray-400", label: "未开始" },
+  PENDING_ACTUAL: { badge: "bg-blue-100 text-blue-700 border-blue-300", dot: "bg-blue-500", label: "待补实际日期" },
+  ON_TRACK: { badge: "bg-slate-100 text-slate-700 border-slate-300", dot: "bg-slate-400", label: "正常" },
+  NOT_STARTED: { badge: "bg-slate-100 text-slate-600 border-slate-300", dot: "bg-slate-400", label: "正常" },
 };
-
-export function statusLabel(status: string): string {
-  return STATUS_STYLE[status]?.label ?? status;
-}
+export function statusLabel(status: string): string { return STATUS_STYLE[status]?.label ?? status; }

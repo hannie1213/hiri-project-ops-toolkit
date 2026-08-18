@@ -27,7 +27,7 @@ export default function ImportPage() {
     setLoading(true);
     try {
       const buf = new Uint8Array(await f.arrayBuffer());
-      const res = await parseProgressSheet(buf);
+      const res = await parseProgressSheet(buf, f.name);
       if (res.projects.length === 0) {
         setError(res.errors.join("\n") || "未解析到任何项目，请检查表结构");
         setPreview(null);
@@ -55,7 +55,7 @@ export default function ImportPage() {
     try {
       const f = fileRef.current.files[0];
       const buf = new Uint8Array(await f.arrayBuffer());
-      const res: ImportResult = await parseProgressSheet(buf);
+      const res: ImportResult = await parseProgressSheet(buf, f.name);
       if (res.projects.length === 0) {
         setError(res.errors.join("\n") || "未解析到任何项目");
         return;
@@ -70,10 +70,20 @@ export default function ImportPage() {
             pmRaw: p.pmRaw,
             startDate: p.startDate ? fmtDate(p.startDate) : null,
             endDate: p.endDate ? fmtDate(p.endDate) : null,
+            category: p.category ?? null,
+            contractType: p.contractType ?? null,
+            contractSignedDate: p.contractSignedDate ? fmtDate(p.contractSignedDate) : null,
+            contractAmount: p.contractAmount ?? null,
+            upstreamUnit: p.upstreamUnit ?? null,
+            marketOwner: p.marketOwner ?? null,
+            currentStatus: p.currentStatus ?? null,
+            remark: p.remark ?? null,
+            team: p.team ?? null,
             milestones: p.milestones.map((m) => ({
               name: m.name,
               plannedDate: m.plannedDate ? fmtDate(m.plannedDate) : null,
               actualDate: m.actualDate ? fmtDate(m.actualDate) : null,
+              dateIssueReason: m.dateIssueReason ?? null,
             })),
           })),
           errors: res.errors,
@@ -128,14 +138,14 @@ export default function ImportPage() {
       <Card>
         <CardHeader
           title="上传文件"
-          desc="支持 .xlsx / .xls（默认取名为「所有项目进度计划情况」的工作表，找不到则取第一个工作表）"
+          desc="支持 .xlsx / .xls / .csv；Excel 必须包含名为「所有项目进度计划情况」的工作表，文件仅在浏览器本地解析"
         />
         <div className="space-y-4 p-5">
           <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 py-10 transition hover:border-blue-400 hover:bg-blue-50/40">
             <FileSpreadsheet className="h-10 w-10 text-slate-400" />
             <span className="mt-3 text-sm font-medium text-slate-600">{fileName || "点击选择 Excel 文件"}</span>
             <span className="mt-1 text-xs text-slate-400">上传后自动解析预览</span>
-            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={pickFile} />
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={pickFile} />
           </label>
 
           <div className="flex flex-wrap items-center gap-4">
@@ -220,8 +230,9 @@ export default function ImportPage() {
             <p className="font-medium text-slate-600">导入规则</p>
             <p>· 表头需包含「项目名称」及至少一对「XX计划 / XX实际」列；节点列形如：方案计划、方案实际</p>
             <p>· 负责人列支持多 PM 分隔（/ 、 ， , ; 换行）</p>
-            <p>· 实际日期为空 → 显示「待补实际日期」；计划日期已过 → 项目「有延期风险」</p>
-            <p>· 实际日期早于计划日期 / 晚于今天 → 标记「日期待核对」</p>
+            <p>· 实际日期为空 → 显示「待补实际日期」，即使计划日期已过也不直接判断延期</p>
+            <p>· 前置节点实际晚于计划 →「有延期风险」；最终延期只以验收实际日期判断</p>
+            <p>· 无法识别的日期会标记为「日期待核对」，且不参与延期判断</p>
             <p className="flex items-center gap-1 text-red-500">
               <XCircle className="h-3.5 w-3.5" /> 清空导入模式会删除全部现有项目，请谨慎使用
             </p>

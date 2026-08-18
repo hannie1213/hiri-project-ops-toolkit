@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "产品项目部工具优化平台",
-  description: "项目进度监控 · 周报收集（本地版）",
+  description: "项目进度监管 · 浏览器本地数据 · 静态版",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -23,19 +23,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <NavLink href="/">仪表盘</NavLink>
                 <NavLink href="/projects">项目管理</NavLink>
                 <NavLink href="/import">导入</NavLink>
-                <NavLink href="/reminders">到期提醒</NavLink>
-                <NavLink href="/weekly">周报</NavLink>
-                <NavLink href="/admin">管理</NavLink>
-                <div className="ml-2 flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1">
-                  <span>管理员</span>
-                  <span className="text-xs text-slate-500">本地版</span>
-                </div>
+                <NavLink href="/reminders">提醒清单</NavLink>
+                <NavLink href="/weekly">周报合成</NavLink>
+                <NavLink href="/confirm">项目状态确认</NavLink>
+                <NavLink href="/admin">本地数据</NavLink>
               </nav>
             </div>
           </header>
           <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">{children}</main>
           <footer className="border-t py-4 text-center text-xs text-slate-400">
-            产品项目部工具优化平台 · 本地单机版（数据存于浏览器）
+            本工具数据保存在当前浏览器，不会自动同步到其他电脑。
           </footer>
         </div>
       </body>

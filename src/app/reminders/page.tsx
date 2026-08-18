@@ -32,7 +32,7 @@ function buildItems(): ReminderItem[] {
   const items: ReminderItem[] = [];
   for (const p of listProjects()) {
     const ev = evaluate(p);
-    if (ev.statusInfo.status === "ACCEPTED") continue;
+    if (ev.statusInfo.accepted) continue;
     const ups = upcomingMilestones(ev.statusInfo);
     for (const u of ups.noPlan) {
       items.push({

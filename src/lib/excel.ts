@@ -1,14 +1,64 @@
 import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 import { parseDate } from "./utils";
 import type { TeamKey } from "./store";
 
 export const TARGET_SHEET = "所有项目进度计划情况";
+
+export const WEEKLY_GROUPS = {
+  项目交付: ["严志展", "詹小坊", "代友林", "左恺", "陈俊明", "林锦", "吴杰", "陈默涵", "焦佳豪", "温彩德", "杨郑明", "林颖喆", "谷浩天", "张耿标", "吴毅强", "蔡圣炜", "赵龙", "黄传武", "郑凯轩", "李志浩", "魏向中", "周飞明", "蒋家豪", "陈权", "王一帆", "林子涵", "郭柳江", "岳佳成", "阮腾伟"],
+  质量控制组: ["杜思明"],
+  售后服务组: ["谢木江", "刘仲武"],
+} as const;
+
+export function recognizeWeeklyMember(fileName: string): string | null {
+  return Object.values(WEEKLY_GROUPS).flat().find((name) => fileName.includes(name)) ?? null;
+}
+
+export async function buildWeeklyGroupWorkbooks(files: Array<{ fileName: string; memberName: string; buffer: Uint8Array }>, dateLabel: string): Promise<Array<{ fileName: string; buffer: Uint8Array }>> {
+  const groups: Array<{ key: keyof typeof WEEKLY_GROUPS; filePrefix: string }> = [
+    { key: "项目交付", filePrefix: "项目交付周报" }, { key: "质量控制组", filePrefix: "质量控制组周报" }, { key: "售后服务组", filePrefix: "售后服务组周报" },
+  ];
+  const results: Array<{ fileName: string; buffer: Uint8Array }> = [];
+  for (const group of groups) {
+    const workbook = new ExcelJS.Workbook();
+    const selected = files.filter((file) => (WEEKLY_GROUPS[group.key] as readonly string[]).includes(file.memberName));
+    for (const file of selected) {
+      const source = new ExcelJS.Workbook();
+      if (/\.xls$/i.test(file.fileName) && !/\.xlsx$/i.test(file.fileName)) {
+        const oldBook = XLSX.read(file.buffer, { type: "array", cellDates: true });
+        const converted = XLSX.write(oldBook, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+        await source.xlsx.load(converted as unknown as Parameters<typeof source.xlsx.load>[0]);
+      } else await source.xlsx.load(file.buffer as unknown as Parameters<typeof source.xlsx.load>[0]);
+      const from = source.worksheets[0];
+      if (!from) throw new Error(`文件「${file.fileName}」没有可读取的工作表`);
+      const to = workbook.addWorksheet(file.memberName);
+      from.columns.forEach((column, index) => { to.getColumn(index + 1).width = column.width; });
+      from.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+        const targetRow = to.getRow(rowNumber); targetRow.height = row.height;
+        row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+          const target = targetRow.getCell(columnNumber);
+          target.value = cell.value; target.style = { ...cell.style }; target.numFmt = cell.numFmt;
+        });
+      });
+      const merges = ((from.model as unknown as { merges?: string[] }).merges ?? []);
+      merges.forEach((range) => { try { to.mergeCells(range); } catch { /* ignore malformed merge */ } });
+      to.views = from.views;
+      to.pageSetup = { ...from.pageSetup };
+    }
+    // 即使某组本周无人提交，也生成一个说明页，保证固定输出三个文件。
+    if (!workbook.worksheets.length) workbook.addWorksheet("说明").getCell("A1").value = "本次未选择该组个人周报文件";
+    results.push({ fileName: `${group.filePrefix}${dateLabel}.xlsx`, buffer: new Uint8Array(await workbook.xlsx.writeBuffer()) });
+  }
+  return results;
+}
 
 export type ImportedMilestone = {
   name: string;
   order: number;
   plannedDate: Date | null;
   actualDate: Date | null;
+  dateIssueReason?: string | null;
 };
 
 export type ImportedProject = {
@@ -18,6 +68,14 @@ export type ImportedProject = {
   startDate?: Date | null;
   endDate?: Date | null;
   remark?: string | null;
+  category?: string | null;
+  contractType?: string | null;
+  contractSignedDate?: Date | null;
+  contractAmount?: string | null;
+  upstreamUnit?: string | null;
+  marketOwner?: string | null;
+  currentStatus?: string | null;
+  team?: TeamKey | null;
   milestones: ImportedMilestone[];
   row: number;
 };
@@ -35,6 +93,21 @@ const CODE_KEYS = ["项目编号", "编号", "编码"];
 const PM_KEYS = ["负责人", "项目经理", "项目负责人", "pm", "项目pm", "项目经手人"];
 const START_KEYS = ["计划开始", "开始日期", "开始时间", "计划启动"];
 const END_KEYS = ["计划完成", "计划结束", "完成日期", "计划结束日期", "计划交付"];
+const BASIC_FIELDS = {
+  category: ["项目类别"], contractType: ["合同类型"], contractSignedDate: ["合同签订日期"],
+  contractAmount: ["合同金额"], upstreamUnit: ["上家单位"], marketOwner: ["市场负责人"],
+  currentStatus: ["当前项目状态", "项目状态"], remark: ["备注"], team: ["项目组"],
+} as const;
+
+function parseTeam(value: string): TeamKey | null {
+  const normalized = value.replace(/\s+/g, "").toUpperCase();
+  if (/^(项目)?A组?$/.test(normalized)) return "A";
+  if (/^(项目)?B组?$/.test(normalized)) return "B";
+  if (/^(项目)?C组?$/.test(normalized)) return "C";
+  if (/质量控制|质安|QA/.test(normalized)) return "QA";
+  if (/售后/.test(normalized)) return "AFTERSALES";
+  return null;
+}
 
 function cellToText(cell: ExcelJS.Cell | undefined): string {
   if (!cell || cell.value == null) return "";
@@ -203,17 +276,20 @@ export async function parseMembersSheet(buffer: Uint8Array): Promise<{
  *  C. 单行简单表头：项目名称 + 计划开始/计划完成（自动生成 开始/验收 节点）
  *  名称列支持"项目名称/项目合同名称/名称/项目"等变体，负责人列支持"负责人/项目经理/项目负责人"等
  */
-export async function parseProgressSheet(buffer: Uint8Array): Promise<ImportResult> {
+export async function parseProgressSheet(buffer: Uint8Array, fileName = "file.xlsx"): Promise<ImportResult> {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+  if (/\.(xls|csv)$/i.test(fileName) && !/\.xlsx$/i.test(fileName)) {
+    const source = XLSX.read(buffer, { type: "array", cellDates: true });
+    const converted = XLSX.write(source, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+    await workbook.xlsx.load(converted as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+  } else {
+    await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+  }
 
-  const sheet =
-    workbook.getWorksheet(TARGET_SHEET) ??
-    workbook.worksheets.find((w) => w.name.includes("进度计划")) ??
-    workbook.worksheets[0];
+  const sheet = /\.csv$/i.test(fileName) ? workbook.worksheets[0] : workbook.getWorksheet(TARGET_SHEET);
 
   if (!sheet) {
-    return { projects: [], errors: ["无法找到工作表，请确认文件中包含「所有项目进度计划情况」"], sheetName: "", skippedHeaderRows: 0 };
+    return { projects: [], errors: [`找不到名为「${TARGET_SHEET}」的工作表，请检查工作表名称后重新导入。`], sheetName: "", skippedHeaderRows: 0 };
   }
 
   const rawRows: RawRow[] = [];
@@ -273,6 +349,10 @@ export async function parseProgressSheet(buffer: Uint8Array): Promise<ImportResu
     pmCol = -1,
     startCol = -1,
     endCol = -1;
+  const basicCols: Record<keyof typeof BASIC_FIELDS, number> = {
+    category: -1, contractType: -1, contractSignedDate: -1, contractAmount: -1,
+    upstreamUnit: -1, marketOwner: -1, currentStatus: -1, remark: -1, team: -1,
+  };
   header.forEach((h, idx) => {
     const key = headerKey(h);
     if (!key) return;
@@ -280,6 +360,9 @@ export async function parseProgressSheet(buffer: Uint8Array): Promise<ImportResu
     if (codeCol < 0 && matchHeaderKey(key, CODE_KEYS)) codeCol = idx;
     if (startCol < 0 && START_KEYS.some((k) => key.includes(headerKey(k)))) startCol = idx;
     if (endCol < 0 && END_KEYS.some((k) => key.includes(headerKey(k)))) endCol = idx;
+    (Object.keys(BASIC_FIELDS) as Array<keyof typeof BASIC_FIELDS>).forEach((field) => {
+      if (basicCols[field] < 0 && BASIC_FIELDS[field].some((candidate) => key === headerKey(candidate))) basicCols[field] = idx;
+    });
   });
   // 负责人列两遍扫描：优先"项目负责人/项目经理/pm"等强匹配，避免误取"市场负责人"
   for (let pass = 0; pass < 2 && pmCol < 0; pass++) {
@@ -344,7 +427,7 @@ export async function parseProgressSheet(buffer: Uint8Array): Promise<ImportResu
     // ── 单行表头：列形如 "方案计划" / "方案实际"、"XX-计划日期" / "XX-实际日期" ──
     dataStart = headerRowIndex + 1;
     // 跳过可能存在的重复表头行（如导出模板的第二行表头）
-    if (dataStart < rawRows.length && rowTexts[dataStart].some((t) => matchHeaderKey(headerKey(t), NAME_KEYS))) {
+    if (dataStart < rawRows.length && rowTexts[dataStart].some((t) => isNameKey(headerKey(t)) && ["项目", "项目名称", "名称"].includes(headerKey(t)))) {
       dataStart++;
     }
 
@@ -390,6 +473,15 @@ export async function parseProgressSheet(buffer: Uint8Array): Promise<ImportResu
       pmRaw: pmCol >= 0 ? cellToText(cells[pmCol]) : "",
       startDate: startCol >= 0 ? cellToDate(cells[startCol]) : null,
       endDate: endCol >= 0 ? cellToDate(cells[endCol]) : null,
+      category: basicCols.category >= 0 ? cellToText(cells[basicCols.category]) || null : null,
+      contractType: basicCols.contractType >= 0 ? cellToText(cells[basicCols.contractType]) || null : null,
+      contractSignedDate: basicCols.contractSignedDate >= 0 ? cellToDate(cells[basicCols.contractSignedDate]) : null,
+      contractAmount: basicCols.contractAmount >= 0 ? cellToText(cells[basicCols.contractAmount]) || null : null,
+      upstreamUnit: basicCols.upstreamUnit >= 0 ? cellToText(cells[basicCols.upstreamUnit]) || null : null,
+      marketOwner: basicCols.marketOwner >= 0 ? cellToText(cells[basicCols.marketOwner]) || null : null,
+      currentStatus: basicCols.currentStatus >= 0 ? cellToText(cells[basicCols.currentStatus]) || null : null,
+      remark: basicCols.remark >= 0 ? cellToText(cells[basicCols.remark]) || null : null,
+      team: parseTeam(basicCols.team >= 0 ? cellToText(cells[basicCols.team]) : ""),
       milestones: [],
       row: rowNumber,
     };
@@ -398,12 +490,16 @@ export async function parseProgressSheet(buffer: Uint8Array): Promise<ImportResu
     for (const mc of milestoneCols) {
       const planned = mc.planCol >= 0 ? cellToDate(cells[mc.planCol]) : null;
       const actual = mc.actualCol >= 0 ? cellToDate(cells[mc.actualCol]) : null;
-      if (planned || actual) {
+      const plannedRaw = mc.planCol >= 0 ? cellToText(cells[mc.planCol]) : "";
+      const actualRaw = mc.actualCol >= 0 ? cellToText(cells[mc.actualCol]) : "";
+      const dateIssueReason = [plannedRaw && !planned ? `计划日期「${plannedRaw}」无法识别` : "", actualRaw && !actual ? `实际日期「${actualRaw}」无法识别` : ""].filter(Boolean).join("；") || null;
+      if (["到货", "进场", "完工（施工）", "完工", "施工完工", "调试", "试运行", "验收"].some((n) => mc.name.includes(n)) || planned || actual || dateIssueReason) {
         project.milestones.push({
           name: mc.name,
           order: mc.order,
           plannedDate: planned,
           actualDate: actual,
+          dateIssueReason,
         });
       }
     }
