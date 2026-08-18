@@ -452,6 +452,13 @@ export function listMembers(): Member[] {
   return read<Member[]>(KEYS.members, []);
 }
 
+/** 重置成员名单为默认名单 */
+export function resetToDefaultMembers(): Member[] {
+  const seeded = seedDefaultMembers();
+  write(KEYS.members, seeded);
+  return seeded;
+}
+
 export function createMember(name: string, team: TeamKey, subTeam: SubTeamKey = "NONE"): Member {
   const members = read<Member[]>(KEYS.members, []);
   const m: Member = { id: uid("mem_"), name: name.trim(), team, subTeam, active: true };

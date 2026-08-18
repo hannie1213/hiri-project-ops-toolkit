@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Database, FileSpreadsheet, FolderPlus, History, Plus, ScrollText, Trash2, UserPlus, Users } from "lucide-react";
+import { Database, FileSpreadsheet, FolderPlus, History, Plus, RotateCcw, ScrollText, Trash2, UserPlus, Users } from "lucide-react";
 import { Button, Card, CardHeader, Input, Select } from "@/components/ui";
-import { listMembers, createMember, updateMember, deleteMember, listImports, exportProjects, subscribe, TEAMS, TEAM_LABEL, SUBTEAM_LABEL, SUB_TEAMS, type TeamKey, type SubTeamKey, type Member, type ImportLog } from "@/lib/store";
+import { listMembers, createMember, updateMember, deleteMember, listImports, exportProjects, subscribe, resetToDefaultMembers, TEAMS, TEAM_LABEL, SUBTEAM_LABEL, SUB_TEAMS, type TeamKey, type SubTeamKey, type Member, type ImportLog } from "@/lib/store";
 import { buildProgressWorkbook } from "@/lib/excel";
 
 export default function AdminPage() {
@@ -57,6 +57,13 @@ export default function AdminPage() {
   function delMember(m: Member) {
     if (!confirm(`删除成员「${m.name}」？`)) return;
     deleteMember(m.id);
+    load();
+  }
+
+  function resetMembers() {
+    if (!confirm("确定重置为默认名单？当前所有成员（含手动增删改）将被覆盖为系统默认的 32 人名单。")) return;
+    resetToDefaultMembers();
+    setBulkMsg("已重置为默认名单");
     load();
   }
 
@@ -166,12 +173,15 @@ export default function AdminPage() {
           }
           desc={`共 ${members.length} 人`}
           right={
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               {TEAMS.map((t) => (
                 <span key={t} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                   {TEAM_LABEL[t]} {teamCounts[t]}
                 </span>
               ))}
+              <Button variant="secondary" size="sm" onClick={resetMembers}>
+                <RotateCcw className="h-3.5 w-3.5" /> 重置为默认名单
+              </Button>
             </div>
           }
         />
