@@ -321,9 +321,9 @@ export async function parseProgressSheet(buffer: Uint8Array): Promise<ImportResu
       }
     }
 
+    // 没有任何日期数据的项目也要保留（不跳过），作为"计划待填"展示
     if (project.milestones.length === 0 && !project.startDate && !project.endDate) {
-      errors.push(`第 ${rowNumber} 行「${name}」无任何日期数据，已跳过`);
-      continue;
+      project.milestones.push({ name: "未排期", order: 0, plannedDate: null, actualDate: null });
     }
 
     projects.push(project);
