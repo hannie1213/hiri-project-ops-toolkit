@@ -24,3 +24,10 @@ export function inferProjectTeam(managers: readonly string[]): TeamKey | null {
   }
   return teams.size === 1 ? [...teams][0] : null;
 }
+
+/** 把旧版 PROJECT + subTeam 结构转换为当前平级组别。 */
+export function resolveLegacyProjectTeam(team: unknown, subTeam: unknown, managers: readonly string[]): TeamKey | null {
+  if (TEAMS.includes(team as TeamKey)) return team as TeamKey;
+  if (team === "PROJECT" && (subTeam === "A" || subTeam === "B" || subTeam === "C")) return subTeam;
+  return inferProjectTeam(managers);
+}

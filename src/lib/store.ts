@@ -3,12 +3,12 @@
 // 纯浏览器端数据层：IndexedDB 持久化，内存镜像保证现有页面可同步读取。
 
 import { evaluateProject, type ProjectStatusInfo } from "@/lib/status";
-import { TEAM_MEMBERS, TEAMS, inferProjectTeam, type TeamKey } from "@/lib/team-members";
+import { TEAM_MEMBERS, TEAMS, inferProjectTeam, resolveLegacyProjectTeam, type TeamKey } from "@/lib/team-members";
 import { splitPm, uid, fmtDate, parseDate } from "@/lib/utils";
 
 /** 5 个平级组别（项目组分 A/B/C，与质安组/售后组并列） */
 export type SubTeamKey = "A" | "B" | "C" | "NONE";
-export { TEAM_MEMBERS, TEAMS, inferProjectTeam };
+export { TEAM_MEMBERS, TEAMS, inferProjectTeam, resolveLegacyProjectTeam };
 export type { TeamKey };
 
 export const TEAM_LABEL: Record<TeamKey, string> = {
@@ -219,9 +219,13 @@ export function listProjects(): Project[] {
   let migrated = false;
   const normalized = raw.map((p) => {
     const managers = syncManagers(p.pmRaw);
-    if (p.team == null && p.teamResolved !== true) {
+    const legacy = p as Omit<Project, "team"> & { team: TeamKey | "PROJECT" | null | undefined; subTeam?: SubTeamKey };
+    const hasValidTeam = TEAMS.includes(legacy.team as TeamKey);
+    const needsTeamMigration = !hasValidTeam && !(legacy.team == null && p.teamResolved === true);
+    if (needsTeamMigration) {
       migrated = true;
-      return { ...p, managers, team: inferProjectTeam(managers), teamResolved: true };
+      const { subTeam: _legacySubTeam, ...project } = legacy;
+      return { ...project, managers, team: resolveLegacyProjectTeam(legacy.team, legacy.subTeam, managers), teamResolved: true } as Project;
     }
     if (p.managers?.join("\u0000") !== managers.join("\u0000")) {
       migrated = true;
@@ -557,7 +561,23 @@ export function listMembers(): Member[] {
     write(KEYS.members, seeded);
     return seeded;
   }
-  return existing;
+  let migrated = false;
+  const normalized: Member[] = existing.map((member): Member => {
+    const legacy = member as Omit<Member, "team"> & { team: TeamKey | "PROJECT"; subTeam?: SubTeamKey };
+    if (legacy.team === "PROJECT") {
+      migrated = true;
+      const team = resolveLegacyProjectTeam(legacy.team, legacy.subTeam, [legacy.name]);
+      return { ...legacy, team: team ?? "A", subTeam: team ? autoSubTeam(team) : "NONE" } as Member;
+    }
+    const expectedSubTeam = autoSubTeam(legacy.team);
+    if (legacy.subTeam !== expectedSubTeam) {
+      migrated = true;
+      return { ...legacy, team: legacy.team as TeamKey, subTeam: expectedSubTeam } as Member;
+    }
+    return member;
+  });
+  if (migrated) write(KEYS.members, normalized);
+  return normalized;
 }
 
 /** 重置成员名单为默认名单 */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inferProjectTeam } from "../src/lib/team-members";
+import { inferProjectTeam, resolveLegacyProjectTeam } from "../src/lib/team-members";
 
 describe("项目组自动回填", () => {
   it("按固定项目经理名单识别 A/B/C 组", () => {
@@ -15,5 +15,10 @@ describe("项目组自动回填", () => {
   it("跨组或未知负责人不擅自归类", () => {
     expect(inferProjectTeam(["林锦", "赵龙"])).toBeNull();
     expect(inferProjectTeam(["未知人员"])).toBeNull();
+  });
+
+  it("兼容旧版 PROJECT + subTeam 分组结构", () => {
+    expect(resolveLegacyProjectTeam("PROJECT", "B", ["未知人员"])).toBe("B");
+    expect(resolveLegacyProjectTeam("PROJECT", "NONE", ["林锦"])).toBe("A");
   });
 });
