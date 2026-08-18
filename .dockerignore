@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+.git
+.env
+.env.local
+*.tgz
+*.txt
+build-output.txt
+tsc-output.txt
+tsconfig.check.json
+check-prisma.js
+Dockerfile
+docker-compose.yml
+docs
+tests

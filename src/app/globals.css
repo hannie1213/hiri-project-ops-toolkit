@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+:root {
+  --background: 220 33% 98%;
+  --foreground: 224 30% 14%;
+  --primary: 222 84% 52%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 20% 95%;
+  --muted: 220 14% 92%;
+  --muted-foreground: 220 10% 42%;
+  --accent: 222 84% 96%;
+  --border: 220 14% 88%;
+  --card: 0 0% 100%;
+  --destructive: 0 72% 51%;
+  --success: 142 71% 35%;
+  --warning: 35 92% 46%;
+  --radius: 0.625rem;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

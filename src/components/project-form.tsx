@@ -1,0 +1,191 @@
+"use client";
+
+import { useState } from "react";
+import { AlertCircle, ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react";
+import { Button, Card, CardHeader, Input } from "@/components/ui";
+
+export type MilestoneDraft = {
+  name: string;
+  plannedDate: string;
+  actualDate: string;
+  remark: string;
+};
+
+export type ProjectFormValue = {
+  name: string;
+  code: string;
+  category: string;
+  pmRaw: string;
+  startDate: string;
+  endDate: string;
+  remark: string;
+  milestones: MilestoneDraft[];
+  version?: number;
+};
+
+export default function ProjectForm({
+  initial,
+  submitting,
+  onSubmit,
+}: {
+  initial: ProjectFormValue;
+  submitting?: boolean;
+  onSubmit: (v: ProjectFormValue) => Promise<void>;
+}) {
+  const [form, setForm] = useState<ProjectFormValue>(initial);
+  const [error, setError] = useState("");
+
+  function set<K extends keyof ProjectFormValue>(key: K, value: ProjectFormValue[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function setMilestone(i: number, key: keyof MilestoneDraft, value: string) {
+    setForm((f) => {
+      const milestones = f.milestones.map((m, idx) => (idx === i ? { ...m, [key]: value } : m));
+      return { ...f, milestones };
+    });
+  }
+
+  function addMilestone() {
+    setForm((f) => ({
+      ...f,
+      milestones: [...f.milestones, { name: "", plannedDate: "", actualDate: "", remark: "" }],
+    }));
+  }
+
+  function removeMilestone(i: number) {
+    setForm((f) => ({ ...f, milestones: f.milestones.filter((_, idx) => idx !== i) }));
+  }
+
+  function moveMilestone(i: number, dir: -1 | 1) {
+    setForm((f) => {
+      const ms = [...f.milestones];
+      const j = i + dir;
+      if (j < 0 || j >= ms.length) return f;
+      [ms[i], ms[j]] = [ms[j], ms[i]];
+      return { ...f, milestones: ms };
+    });
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!form.name.trim()) {
+      setError("项目名称不能为空");
+      return;
+    }
+    const milestoneNames = form.milestones.map((m) => m.name.trim()).filter(Boolean);
+    const dup = milestoneNames.find((n, i) => milestoneNames.indexOf(n) !== i);
+    if (dup) {
+      setError(`节点名称重复：「${dup}」`);
+      return;
+    }
+    await onSubmit({
+      ...form,
+      milestones: form.milestones.map((m, i) => ({ ...m, name: m.name.trim() || `节点${i + 1}` })),
+    });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+          <AlertCircle className="h-4 w-4" />
+          {error}
+        </div>
+      )}
+
+      <Card>
+        <CardHeader title="基本信息" />
+        <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <Field label="项目名称 *">
+            <Input value={form.name} onChange={(v) => set("name", v)} placeholder="请输入项目名称" />
+          </Field>
+          <Field label="项目编号">
+            <Input value={form.code} onChange={(v) => set("code", v)} placeholder="可选" />
+          </Field>
+          <Field label="分类 / 产品线">
+            <Input value={form.category} onChange={(v) => set("category", v)} placeholder="如：政务、金融…" />
+          </Field>
+          <Field label="负责人 (PM)" desc="多人用 / 、 ， , ; 分隔，自动拆分">
+            <Input value={form.pmRaw} onChange={(v) => set("pmRaw", v)} placeholder="张三/李四、王五" />
+          </Field>
+          <Field label="计划开始日期">
+            <Input type="date" value={form.startDate} onChange={(v) => set("startDate", v)} />
+          </Field>
+          <Field label="计划完成日期">
+            <Input type="date" value={form.endDate} onChange={(v) => set("endDate", v)} />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="备注">
+              <Input value={form.remark} onChange={(v) => set("remark", v)} placeholder="可选" />
+            </Field>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="进度节点"
+          desc="「验收」节点为终审依据；实际日期留空显示「待补实际日期」，计划已过显示「有延期风险」"
+          right={
+            <Button variant="secondary" onClick={addMilestone} className="text-xs">
+              <Plus className="h-4 w-4" /> 添加节点
+            </Button>
+          }
+        />
+        <div className="space-y-2 p-5">
+          {form.milestones.length === 0 && (
+            <div className="rounded-lg border border-dashed py-8 text-center text-sm text-slate-400">
+              暂无节点，点击「添加节点」创建（如：方案、立项、开发、测试、验收）
+            </div>
+          )}
+          {form.milestones.map((m, i) => (
+            <div key={i} className="grid grid-cols-1 items-center gap-2 rounded-lg border bg-slate-50/60 p-3 sm:grid-cols-[auto_1fr_1fr_1fr_auto]">
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => moveMilestone(i, -1)} className="rounded p-1 text-slate-400 hover:bg-slate-200">
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => moveMilestone(i, 1)} className="rounded p-1 text-slate-400 hover:bg-slate-200">
+                  <ArrowDown className="h-3.5 w-3.5" />
+                </button>
+                <span className="text-xs text-slate-400">{i + 1}</span>
+              </div>
+              <Input value={m.name} onChange={(v) => setMilestone(i, "name", v)} placeholder="节点名称（如 方案/验收）" />
+              <Input type="date" value={m.plannedDate} onChange={(v) => setMilestone(i, "plannedDate", v)} placeholder="计划日期" />
+              <Input type="date" value={m.actualDate} onChange={(v) => setMilestone(i, "actualDate", v)} placeholder="实际日期" />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => removeMilestone(i)}
+                  className="rounded p-1.5 text-red-500 hover:bg-red-50"
+                  title="删除节点"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div className="flex justify-end gap-3">
+        <Button type="submit" variant="primary" disabled={submitting}>
+          <Save className="h-4 w-4" /> {submitting ? "保存中…" : "保存"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function Field({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700">
+        {label}
+        {desc && <span className="ml-1 font-normal text-xs text-slate-400">{desc}</span>}
+      </label>
+      {children}
+    </div>
+  );
+}

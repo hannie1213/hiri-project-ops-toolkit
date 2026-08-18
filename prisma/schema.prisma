@@ -1,0 +1,179 @@
+// 产品项目部工具优化平台 - 数据模型
+// 数据库: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN      // 系统管理员
+  SUPERVISOR // 主管/领导
+  PM         // 项目经理
+  VIEWER     // 只读访客
+}
+
+enum ProjectStatus {
+  ACCEPTED      // 已验收（验收节点有实际日期）
+  DATE_ISSUE    // 日期待核对（数据错误）
+  LATE_RISK     // 有延期风险（非验收节点已到计划日未完成）
+  PENDING_ACTUAL// 待补实际日期（有节点实际日期为空）
+  ON_TRACK      // 正常推进
+  NOT_STARTED   // 未开始
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  name      String
+  role      Role     @default(VIEWER)
+  initials  String?  // 周报人员缩写（如 zs）- 已废弃，保留兼容
+  team      String?  // 小组（PROJECT/AFTERSALES/QA，用于周报合并）
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  milestones    Milestone[]    @relation("MilestoneManager")
+  imports       Import[]
+  auditLogs     AuditLog[]
+  weeklyReports WeeklyReport[]
+  managers      Manager[]
+}
+
+model Project {
+  id        String        @id @default(cuid())
+  name      String
+  code      String? // 项目编号
+  category  String? // 分类/产品线
+  status    ProjectStatus @default(NOT_STARTED)
+  pmRaw     String // 原始PM字段（支持多PM分隔符）
+  startDate DateTime?
+  endDate   DateTime?
+  remark    String?
+  source    String        @default("MANUAL") // IMPORTED / MANUAL
+  version   Int           @default(1) // 乐观锁版本号
+  updatedBy String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  milestones Milestone[]
+  managers   Manager[]
+  imports    Import[]
+  reminders  Reminder[]
+
+  @@index([status])
+  @@index([name])
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String // 节点名称（如 方案/立项/开发/测试/验收）
+  order       Int      @default(0)
+  plannedDate DateTime?
+  actualDate  DateTime?
+  remark      String?
+  version     Int      @default(1)
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+  managerId   String?
+  manager     User?    @relation("MilestoneManager", fields: [managerId], references: [id])
+
+  reminders Reminder[]
+  @@index([projectId])
+}
+
+model Manager {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  name      String // PM 姓名
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, name])
+}
+
+model Import {
+  id          String   @id @default(cuid())
+  fileName    String
+  sheetName   String
+  totalRows   Int
+  createdRows Int
+  updatedRows Int
+  errorRows   Int
+  errors      Json?
+  operatorId  String?
+  operator    User?    @relation(fields: [operatorId], references: [id])
+  createdAt   DateTime @default(now())
+
+  projects Project[]
+}
+
+model WeeklyReport {
+  id          String    @id @default(cuid())
+  staffId     String
+  staff       User      @relation(fields: [staffId], references: [id])
+  weekKey     String // 周一日期，如 2026-08-10
+  content     String // 本周工作内容（Markdown/文本）
+  planned     String? // 下周计划
+  issues      String? // 问题与风险
+  status      String    @default("SUBMITTED") // DRAFT / SUBMITTED
+  submittedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([staffId, weekKey])
+  @@index([weekKey])
+}
+
+model WeeklyMerge {
+  id        String   @id @default(cuid())
+  weekKey   String
+  team      String // A / B / C / ALL
+  content   String // 合并后的完整文本（保留原格式）
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@unique([weekKey, team])
+}
+
+model Reminder {
+  id          String    @id @default(cuid())
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestoneId String?
+  milestone   Milestone? @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  windowDays  Int // 7 / 14 / 30 / 60
+  dueDate     DateTime
+  content     String
+  channel     String    @default("WEEKLY_MAIL")
+  acknowledged Boolean   @default(false)
+  createdFor  String?
+  createdAt   DateTime  @default(now())
+
+  @@index([dueDate])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  operatorId String?
+  operator   User?    @relation(fields: [operatorId], references: [id])
+  action     String // LOGIN/LOGOUT/CREATE/UPDATE/DELETE/IMPORT/MERGE/EXPORT/ACK
+  entity     String // PROJECT/MILESTONE/USER/WEEKLY/IMPORT/AUTH
+  entityId   String?
+  detail     Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([operatorId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}

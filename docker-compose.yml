@@ -1,0 +1,45 @@
+# 一键启动：PostgreSQL + 应用
+# 用法：
+#   1) 修改 .env 中 AUTH_SECRET（生成: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"）
+#   2) docker compose up -d --build
+#   3) 访问 http://localhost:3000
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pt_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: project_tool
+      TZ: Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d project_tool"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: pt_app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/project_tool?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:-please-change-me}
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-admin}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin@123456}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-系统管理员}
+      WEEKLY_STAFF: ${WEEKLY_STAFF:-zs,lw,wq,ly,zc,yh,xy,hj,xm,zl,wg,cz,qy,ww,ty,dy,czh,lm,zy,ph,yf,zhx,jr,sw,hy,cl,tf,xf,qh,wk,mt}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

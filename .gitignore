@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+
+# next.js / build output
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# logs
+*.log
+build-*.txt
+tsc-*.txt
+test-*.txt
+pack-output.txt
+prod.log
+dev*.log
+pglite-*.log
+seed.log
+
+# misc temp / backup
+_backup/
+*.tgz
+deploy-*.ps1
+
+# local db / pglite data (no longer used)
+.pglite-data/
+.pglite-data-*/
+*.pglite*
+
+# env
+.env
+.env.local
+.env*.local
+
+# editor
+.vscode/
+.idea/
+.DS_Store
