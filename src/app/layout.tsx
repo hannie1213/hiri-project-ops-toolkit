@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </nav>
             </div>
           </header>
-          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">{children}</main>
+          <main className="mx-auto w-full max-w-[1760px] flex-1 px-4 py-6">{children}</main>
           <footer className="border-t py-4 text-center text-xs text-slate-400">
             本工具数据保存在当前浏览器，不会自动同步到其他电脑。
           </footer>
