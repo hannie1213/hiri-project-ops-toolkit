@@ -54,6 +54,8 @@ export interface Project {
   version: number;
   milestones: Milestone[];
   managers: string[];
+  team: TeamKey | null;
+  subTeam: SubTeamKey;
 }
 
 export interface Member {
@@ -128,7 +130,24 @@ export function subscribe(key: string, fn: () => void): () => void {
 /* ----------------------------- 项目 ----------------------------- */
 
 export function listProjects(): Project[] {
-  return read<Project[]>(KEYS.projects, []).sort((a, b) => a.name.localeCompare(b.name));
+  const raw = read<Project[]>(KEYS.projects, []);
+  let migrated = false;
+  const normalized = raw.map((p) => {
+    if (p.team === undefined || p.subTeam === undefined) {
+      migrated = true;
+      const managers = syncManagers(p.pmRaw);
+      const resolved = resolveTeamByPM(managers);
+      return {
+        ...p,
+        managers,
+        team: resolved?.team ?? null,
+        subTeam: resolved?.subTeam ?? "NONE",
+      };
+    }
+    return p;
+  });
+  if (migrated) write(KEYS.projects, normalized);
+  return normalized.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function getProject(id: string): Project | undefined {
@@ -157,9 +176,27 @@ function syncManagers(pmRaw: string | null): string[] {
   return Array.from(new Set(splitPm(pmRaw).map((s) => s.trim()).filter(Boolean)));
 }
 
+/** 根据 PM 名字推断所属大组/子组（查成员名单），找不到返回 null */
+function resolveTeamByPM(pmNames: string[]): { team: TeamKey; subTeam: SubTeamKey } | null {
+  if (pmNames.length === 0) return null;
+  const members = read<Member[]>(KEYS.members, []);
+  for (const name of pmNames) {
+    const m = members.find((x) => x.name === name && x.active);
+    if (m) return { team: m.team, subTeam: m.subTeam };
+  }
+  return null;
+}
+
 function refreshStatus(p: Project): Project {
-  // evaluateProject 已在 evaluate() 中计算，这里仅确保 managers 与 pmRaw 同步
-  return { ...p, managers: syncManagers(p.pmRaw) };
+  // evaluateProject 已在 evaluate() 中计算，这里确保 managers 同步，并按 PM 推断 team/subTeam
+  const managers = syncManagers(p.pmRaw);
+  const resolved = resolveTeamByPM(managers);
+  return {
+    ...p,
+    managers,
+    team: p.team ?? resolved?.team ?? null,
+    subTeam: p.subTeam ?? resolved?.subTeam ?? "NONE",
+  };
 }
 
 export interface ProjectInput {
@@ -170,6 +207,8 @@ export interface ProjectInput {
   startDate?: string | null;
   endDate?: string | null;
   remark?: string | null;
+  team?: TeamKey | null;
+  subTeam?: SubTeamKey;
   milestones?: { name: string; plannedDate: string | null; actualDate: string | null }[];
 }
 
@@ -197,6 +236,8 @@ export function createProject(input: ProjectInput): Project {
       updatedBy: "管理员",
     })),
     managers: [],
+    team: input.team ?? null,
+    subTeam: input.subTeam ?? "NONE",
   });
   projects.push(p);
   persistProjects(projects);
@@ -219,6 +260,8 @@ export function updateProject(id: string, input: ProjectInput): Project | undefi
     remark: input.remark ?? prev.remark,
     version: prev.version + 1,
     updatedBy: "管理员",
+    team: input.team ?? prev.team,
+    subTeam: input.subTeam ?? prev.subTeam,
     milestones: (input.milestones ?? []).map((m, i) => ({
       id: uid("m_"),
       name: m.name,
@@ -322,6 +365,8 @@ export function importProjects(
               updatedBy: "管理员",
             })),
             managers: [],
+            team: null,
+            subTeam: "NONE",
           })
         );
         created++;

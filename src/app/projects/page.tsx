@@ -15,6 +15,8 @@ type ProjectRow = {
   code: string | null;
   pmRaw: string | null;
   pmList: string[];
+  team: TeamKey | null;
+  subTeam: SubTeamKey;
   status: string;
   warning: string | null;
   milestones: Array<{ name: string; plannedDate: string | null; actualDate: string | null }>;
@@ -50,6 +52,8 @@ function buildRows(): ProjectRow[] {
       code: p.code,
       pmRaw: p.pmRaw,
       pmList: p.managers,
+      team: p.team,
+      subTeam: p.subTeam,
       status: ev.statusInfo.status,
       warning: ev.statusInfo.warning,
       milestones: p.milestones.map((m) => ({
@@ -77,11 +81,16 @@ function ProjectsPageInner() {
   const [q, setQ] = useState("");
   const [pmName, setPmName] = useState("");
   const [rows, setRows] = useState<ProjectRow[]>([]);
-  const [memberNames, setMemberNames] = useState<string[]>([]);
+  const [pmOptions, setPmOptions] = useState<string[]>([]);
 
   const load = useCallback(() => {
-    setRows(buildRows());
-    setMemberNames(listMembers().filter((m) => m.active).map((m) => m.name).sort((a, b) => a.localeCompare(b, "zh")));
+    const all = buildRows();
+    setRows(all);
+    // PM 名字候选：从项目 PM + 成员名单合并去重
+    const names = new Set<string>();
+    all.forEach((p) => p.pmList.forEach((n) => names.add(n)));
+    listMembers().forEach((m) => names.add(m.name));
+    setPmOptions(Array.from(names).sort((a, b) => a.localeCompare(b, "zh")));
   }, []);
 
   useEffect(() => {
@@ -95,34 +104,14 @@ function ProjectsPageInner() {
     const pmTrim = pmName.trim();
     return rows.filter((p) => {
       if (status !== "ALL" && p.status !== status) return false;
-      if (team !== "ALL") {
-        // 项目组归类：只要项目里至少有一个 PM 是该组成员就归到该组
-        // 简化规则：用 PM 名字是否在 listMembers 的该组成员里判断
-        const inTeam = p.pmList.some((name) => {
-          const m = listMembers().find((x) => x.name === name);
-          return m?.team === team;
-        });
-        // 如果没在成员名单找到任何 PM，回退到按名称包含
-        const any = p.pmList.some((n) => n.includes(nameOrLabel(team)));
-        if (!inTeam && !any) {
-          // 全部 PM 都不在 listMembers 中，按名称模糊匹配 TEAM_LABEL
-          const labelMatch = p.pmRaw ? p.pmRaw.includes(nameOrLabel(team)) : false;
-          if (!labelMatch) return false;
-        }
-      }
-      if (subTeam !== "ALL" && team === "PROJECT") {
-        const inSub = p.pmList.some((name) => {
-          const m = listMembers().find((x) => x.name === name);
-          return m?.team === "PROJECT" && m.subTeam === subTeam;
-        });
-        if (!inSub) return false;
-      }
+      if (team !== "ALL" && p.team !== team) return false;
+      if (team === "PROJECT" && subTeam !== "ALL" && p.subTeam !== subTeam) return false;
       if (qTrim && !p.name.includes(qTrim) && !(p.code || "").includes(qTrim)) return false;
       if (pmTrim && !p.pmList.some((n) => n.includes(pmTrim))) return false;
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, status, team, subTeam, q, pmName, memberNames]);
+  }, [rows, status, team, subTeam, q, pmName]);
 
   return (
     <div className="space-y-4">
@@ -154,7 +143,7 @@ function ProjectsPageInner() {
               list="pm-options"
             />
             <datalist id="pm-options">
-              {memberNames.map((n) => (
+              {pmOptions.map((n) => (
                 <option key={n} value={n} />
               ))}
             </datalist>
@@ -217,25 +206,13 @@ function ProjectsPageInner() {
   );
 }
 
-function nameOrLabel(team: TeamKey): string {
-  // 用于 PM 字段没在 listMembers 中时回退匹配
-  return TEAM_LABEL[team];
-}
-
 function ProjectRowView({ p }: { p: ProjectRow }) {
   const doneCount = p.milestones.filter((m) => m.actualDate).length;
   const nextNode = p.milestones.find((m) => !m.actualDate);
 
-  // 计算项目所属组（按 PM 推算）
-  const teamOfPM = (): { team: string; sub?: string } => {
-    const members = listMembers();
-    for (const name of p.pmList) {
-      const m = members.find((x) => x.name === name);
-      if (m) return { team: TEAM_LABEL[m.team], sub: m.team === "PROJECT" ? SUBTEAM_LABEL[m.subTeam] : undefined };
-    }
-    return { team: "未指定" };
-  };
-  const group = teamOfPM();
+  const groupLabel = p.team
+    ? TEAM_LABEL[p.team] + (p.team === "PROJECT" && p.subTeam !== "NONE" ? ` · ${SUBTEAM_LABEL[p.subTeam]}` : "")
+    : "未分组";
 
   return (
     <tr className="transition hover:bg-slate-50">
@@ -261,10 +238,7 @@ function ProjectRowView({ p }: { p: ProjectRow }) {
         </div>
       </td>
       <td className="px-4 py-3 text-xs">
-        <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">
-          {group.team}
-          {group.sub && group.sub !== "—" ? ` · ${group.sub}` : ""}
-        </span>
+        <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">{groupLabel}</span>
       </td>
       <td className="px-4 py-3">
         <StatusBadge status={p.status} />
