@@ -1,124 +1,191 @@
-# 产品项目部工具优化平台
+# 产品项目部工具优化平台（静态版）
 
-多用户、可部署的**项目进度监控 + 周报收集**内网平台。从本地单机 Electron 工具升级为浏览器访问的共享系统。
+一个**纯静态、零后端、零数据库**的项目进度监控 + 周报收集工具。数据存于浏览器 `localStorage`，可直接免费托管到 Netlify / Vercel / CloudBase / GitHub Pages / 任意静态服务器。
+
+> 适用于：内部小团队、实习期项目、可丢可弃的低运维工具。
+
+---
 
 ## 功能总览
 
 | 模块 | 说明 |
 | --- | --- |
-| 项目监控 | Excel 导入 / 手工录入 / 编辑 / 删除（乐观锁），多 PM 自动拆分 |
-| 状态规则 | 待补实际日期、有延期风险、验收终审、日期待核对、7/14/30/60 天到期提醒 |
-| 周报收集 | 按周收集成员周报，A/B/C 三组合并（保留格式），钉钉/企业微信复制粘贴 |
-| 权限体系 | ADMIN / SUPERVISOR / PM / VIEWER 四角色，服务端逐接口校验 |
-| 审计日志 | 登录、增删改、导入、合并、导出全量留痕 |
-| 部署 | Docker / 云主机 / NAS / CloudBase，一套 Dockerfile 通用 |
+| 仪表盘 | 项目总数 / 有延期风险 / 计划待填 / 日期待核对 / 待补实际日期 / 已验收 / 正常推进 |
+| 项目管理 | 列表筛选、手工新建/编辑/删除、Excel 导入（按名称 upsert / 清空导入）、导出项目为 Excel |
+| 状态引擎 | 自动判定 7 种状态：已验收 / 日期待核对 / 有延期风险 / 计划待填 / 待补实际日期 / 正常推进 / 未开始 |
+| 到期提醒 | 7 / 14 / 30 / 60 天窗口 + 「计划待填」独立桶（无日期的节点不跳过，重点提示） |
+| 成员名单 | 维护"项目组 / 售后组 / 质安组"成员 + 分组；周报时从名单选人 |
+| 周报 | 按周录入，3 种合并模式（A/B/C 组），导出 Excel 可直接发企业微信/钉钉 |
+| 导入历史 | 自动记录最近 50 次导入，文件名/创建/更新/失败行数 |
 
-## 技术栈
+---
 
-- **Next.js 15** (App Router) + **React 19** + **TypeScript**
-- **Tailwind CSS v4**（原子样式，浅色主题）
-- **Prisma ORM + PostgreSQL**（服务端数据库，无 localStorage）
-- **jose**（JWT httpOnly Cookie）+ **bcryptjs**（密码哈希）
-- **exceljs**（Excel 读写）
-- **vitest**（验收规则自动化测试）
+## 与原版的核心差异
 
-## 快速开始
+| 维度 | 原版 | 静态版（本仓库） |
+| --- | --- | --- |
+| 数据存储 | PostgreSQL + Prisma | 浏览器 `localStorage` |
+| 鉴权 | 登录/JWT/4 角色 | 无（单管理员/单机内部用） |
+| 部署 | Docker / Node Server | 纯静态文件，免费托管 |
+| 多人共享 | 同一数据库 | **各自独立**，需通过 Excel 合并 |
+| 审计日志 | 服务端记录 | 无（导入历史替代） |
 
-### 1. 环境要求
+**重要：因为数据在各自浏览器里，多人协作时各管各的数据，最后通过周报 Excel 合并汇总。**
 
-- Node.js ≥ 20（推荐 22）
-- PostgreSQL ≥ 14（或用 docker-compose 一键启动）
-- 国内网络建议配置 npm 镜像：`npm config set registry https://registry.npmmirror.com`
+---
 
-### 2. 安装与初始化
+## 本地运行
 
 ```bash
 npm install
-cp .env.example .env        # 修改 DATABASE_URL 与 AUTH_SECRET
-npx prisma generate          # 生成 Prisma Client
-npx prisma db push           # 建表（开发环境）
-npm run db:seed              # 初始化管理员/周报人员账号
+npm run dev            # http://localhost:3000
 ```
 
-### 3. 启动
+## 静态构建
 
 ```bash
-npm run dev                  # http://localhost:3000
+npm run build
+# 产物在 out/ 目录，复制 out/ 到任意静态服务器即可
 ```
 
-### 4. Docker 一键启动（推荐）
+---
+
+## 部署到 Netlify（推荐，已配置好）
+
+本仓库已包含 `netlify.toml`，部署只需 2 步：
+
+1. 推送到 GitHub（SSH 协议）
+   ```bash
+   git remote add origin git@github.com:<你的用户名>/<仓库名>.git   # 首次
+   git push -u origin master
+   ```
+
+2. 在 Netlify（https://app.netlify.com）关联仓库
+   - Add new site → Import an existing project → 选 GitHub → 选本仓库
+   - 构建设置（**已由 netlify.toml 写好，不用填**）：
+     - Build command: `npm run build`
+     - Publish directory: `out`
+   - 点 Deploy，约 1~2 分钟完成
+
+部署后访问 `https://<随机名>.netlify.app/`，把这个链接转发给同事即可。
+
+### 改代码后自动部署
 
 ```bash
-docker compose up -d --build
+npm run build         # 确认能构建
+git add -A
+git commit -m "改了xx"
+git push              # SSH 协议，push 后 Netlify 自动重新部署
 ```
 
-### 5. 测试
+---
 
-```bash
-npm test                     # 运行验收规则自动化测试（28 个用例）
-```
+## 部署到其他平台
 
-## 默认账号
+| 平台 | 操作 |
+| --- | --- |
+| **Vercel** | 导入 GitHub 仓库；Build command 填 `npm run build`；Output directory 填 `out` |
+| **CloudBase 静态托管** | 本地跑 `npm run build`，把 `out/` 整个上传 |
+| **GitHub Pages** | push 后用 Actions 把 `out/` 部署到 `gh-pages` 分支 |
+| **任意 Nginx / 静态服务器** | 上传 `out/` 全部文件，配置 SPA 回退（如有） |
 
-| 角色 | 用户名 | 密码 | 说明 |
-| --- | --- | --- | --- |
-| 管理员 | admin | Admin@123456 | 全部权限，可管用户/导入/合并 |
-| 主管 | supervisor | Sup@12345 | 可编辑全部项目、导入、合并周报 |
-| 项目经理 | pm | Pm@12345 | 仅见自己负责的项目 |
-| 访客 | viewer | View@12345 | 只读 |
-| 周报人员 | 缩写（如 zs） | Abc@12345 | 提交个人周报 |
+---
 
-> ⚠️ 生产部署后请务必通过环境变量修改默认密码。
+## 使用流程
+
+### 1. 维护成员名单
+进入 `/admin` → "成员名单" → 新增成员（选择分组：项目组 / 售后组 / 质安组），可重命名/停用/删除。
+
+### 2. 导入或新建项目
+- **方式 A：手动新建**：进入 `/projects/new`，填项目名/编号/PM/里程碑
+- **方式 B：Excel 导入**：进入 `/import`，上传按模板填好的 Excel，选择"按名称更新"或"清空后导入"
+
+Excel 工作表名：**所有项目进度计划情况**  
+表头示例：
+| 项目名称 | 项目编号 | 负责人/PM | 方案计划 | 方案实际 | … | 验收计划 | 验收实际 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| XX项目 | P001 | 张三/李四 | 2026-08-01 | 2026-07-30 | … | 2026-12-30 | |
+
+- 日期支持 `2026-08-01`、`2026/8/1`、`2026年8月1日`、Excel 序列号
+- 多 PM 用 `/`、`，`、`;`、换行分隔
+
+### 3. 查看项目状态
+进入 `/` 看仪表盘，进入 `/reminders` 看完整提醒清单。
+
+### 4. 录入周报
+进入 `/weekly` 选周次 → 给本周要写的人填工作内容/下周计划/问题。
+
+### 5. 合并周报
+进入 `/weekly/merge` → 选周次 + 合并模式（A/B/C 组） → 点"导出 Excel"，下载后直接粘到企业微信/钉钉。
+
+---
 
 ## 核心业务规则
 
-1. **实际日期为空 ≠ 逾期**：节点只展示「待补实际日期」；
+1. **实际日期为空 ≠ 逾期**：节点显示「待补实际日期」；
 2. **非验收节点计划已过无实际** → 项目标记「有延期风险」；
 3. **验收终审**：项目是否完成只看「验收」节点的实际日期；
 4. **已验收项目**从到期提醒/跟进中排除；
 5. **7 / 14 / 30 / 60 天**到期窗口；
 6. **日期待核对**：实际日期早于计划日期、无计划却有实际、实际日期晚于今天；
-7. **多 PM 拆分**：`/`、`、`、`，`、`,`、`;`、换行。
+7. **多 PM 拆分**：`/`、`，`、`;`、换行；
+8. **无计划日期的节点不跳过**：归入"计划待填"桶，重点提示项目状态不明确。
 
-详见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) 与 `tests/status.test.ts`。
+---
 
-## Excel 导入格式
+## 数据安全提示
 
-工作表名：**所有项目进度计划情况**
+- **数据存于各自浏览器**，换浏览器 / 清除浏览数据 = 丢失全部数据。
+- 重要变更前请用 `/admin` 的"导出全部"功能做备份。
+- 想在多台设备共享，**目前架构做不到**（除非将来加后端）。当前建议：每月初用 Excel 汇总一次。
+- 想给同事试用，**转发部署链接**即可（每人在自己浏览器里独立使用）。
 
-| 项目名称 | 项目编号 | 负责人/PM | 方案计划 | 方案实际 | … | 验收计划 | 验收实际 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| XX项目 | P001 | 张三/李四 | 2026-08-01 | 2026-07-30 | … | 2026-12-30 | |
+---
 
-- 表头自动识别；日期支持 `2026-08-01`、`2026/8/1`、`2026年8月1日`、Excel 序列号
-- 导入模式：**按名称更新**（推荐）或**清空后导入**（危险）
-- 系统同时提供「下载当前数据模板」导出
+## 技术栈
+
+- **Next.js 15** (App Router, `output: "export"`) + **React 19** + **TypeScript**
+- **Tailwind CSS v4**（原子样式，浅色主题）
+- **exceljs**（Excel 读写，全部在浏览器端完成）
+- **lucide-react**（图标）
+
+无数据库、无登录、无服务端 runtime。
+
+---
 
 ## 目录结构
 
 ```
-├── prisma/                 # 数据模型与种子数据
+├── netlify.toml         # Netlify 部署配置
+├── next.config.ts       # output: "export" 静态导出
 ├── src/
-│   ├── app/                # 页面与 API 路由（App Router）
-│   │   ├── api/            # REST API（鉴权/项目/导入/周报/管理）
-│   │   ├── login/          # 登录
-│   │   ├── projects/       # 项目列表 / 新建 / 详情
-│   │   ├── weekly/         # 周报提交 / 汇总合并
-│   │   ├── reminders/      # 到期提醒
-│   │   └── admin/          # 用户管理 / 审计日志
-│   ├── components/         # 共享组件（表单/表格/徽章）
-│   ├── lib/                # 核心逻辑（鉴权/状态引擎/Excel/审计）
-│   └── middleware.ts       # 路由级鉴权
-├── tests/                  # 验收规则自动化测试
-├── docs/                   # 部署与验收文档
-└── Dockerfile / docker-compose.yml
+│   ├── app/             # 页面（路由）
+│   │   ├── page.tsx     # 仪表盘
+│   │   ├── projects/    # 项目列表 / 详情 / 新建
+│   │   ├── weekly/      # 周报录入 / 合并导出
+│   │   ├── reminders/   # 到期提醒
+│   │   ├── import/      # Excel 导入
+│   │   └── admin/       # 成员名单 / 导入历史 / 导出清空
+│   ├── components/      # 共享组件
+│   └── lib/             # 状态引擎 / localStorage 数据层 / Excel 工具
+├── _backup/             # 旧后端代码（已禁用，仅作历史保留）
+└── out/                 # 构建产物（部署只需这个目录）
 ```
 
-## 部署
+---
 
-详见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)，支持：
+## 常见问题
 
-1. Docker Compose（本机/内网/NAS）
-2. 云主机（Docker 单容器）
-3. 群晖/威联通 NAS
-4. CloudBase 云托管（CodeBuddy 内置部署）
+**Q: 部署后打开是 404？**  
+A: 检查 Netlify 的 Publish directory 是否为 `out`（不是 `.next`）。
+
+**Q: push 一直超时？**  
+A: 你那边的网络对 GitHub HTTPS 443 端口可能做了拦截，改用 SSH 协议（`git@github.com:...`）即可，本仓库已默认走 SSH。
+
+**Q: 想多人共享同一份数据？**  
+A: 当前架构不支持。建议：
+- 各人维护自己的，最后用 Excel 合并；
+- 或将来加个后端 + 数据库（参考 `_backup/` 里的旧服务端代码）。
+
+**Q: 想加个新功能？**  
+A: 在 `src/app/` 加页面或修改 `src/lib/status.ts` 状态规则，跑 `npm run build`，`git push`，Netlify 自动部署。
