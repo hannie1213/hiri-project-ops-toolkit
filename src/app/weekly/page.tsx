@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, ClipboardList, Loader2, Merge, Plus, Save, Trash2, Users } from "lucide-react";
 import { Button, Card, CardHeader, Input, Select } from "@/components/ui";
-import { listMembers, listWeekly, upsertWeekly, deleteWeekly, subscribe, TEAMS, TEAM_LABEL, SUBTEAM_LABEL, SUB_TEAMS, type TeamKey, type SubTeamKey, type Member, type WeeklyReport } from "@/lib/store";
+import { listMembers, listWeekly, upsertWeekly, deleteWeekly, subscribe, TEAMS, TEAM_LABEL, type TeamKey, type SubTeamKey, type Member, type WeeklyReport } from "@/lib/store";
 import { mondayOf } from "@/lib/utils";
 
 type RowView = {
@@ -97,7 +97,7 @@ export default function WeeklyPage() {
     const id = `mem_temp_${Date.now()}`;
     setRows((prev) => [
       ...prev,
-      { id, memberId: id, name: "", team: "PROJECT", subTeam: "A", content: "", planned: "", issues: "", persisted: false },
+      { id, memberId: id, name: "", team: "A", subTeam: "A", content: "", planned: "", issues: "", persisted: false },
     ]);
   }
 
@@ -150,20 +150,10 @@ export default function WeeklyPage() {
                 <Select
                   value={r.team}
                   onChange={(v) => {
-                    const t = v as TeamKey;
-                    // 切到非项目组时，把 subTeam 重置为 NONE
-                    const sub = t === "PROJECT" ? r.subTeam : "NONE";
-                    setRow(r.id, { team: t, subTeam: sub });
+                    setRow(r.id, { team: v as TeamKey });
                   }}
                   options={TEAMS.map((t) => ({ value: t, label: TEAM_LABEL[t] }))}
                 />
-                {r.team === "PROJECT" && (
-                  <Select
-                    value={r.subTeam}
-                    onChange={(v) => setRow(r.id, { subTeam: v as SubTeamKey })}
-                    options={SUB_TEAMS.PROJECT.map((s) => ({ value: s, label: SUBTEAM_LABEL[s] }))}
-                  />
-                )}
                 {r.persisted && (
                   <span className="flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-600">
                     <CheckCircle2 className="h-3.5 w-3.5" /> 已录入
@@ -235,10 +225,7 @@ export default function WeeklyPage() {
             <div key={r.id} className="flex items-center justify-between px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-700">{r.name || "（未命名）"}</span>
-                <span className="text-xs text-slate-400">
-                  {TEAM_LABEL[r.team]}
-                  {r.team === "PROJECT" && r.subTeam !== "NONE" && ` · ${SUBTEAM_LABEL[r.subTeam]}`}
-                </span>
+                <span className="text-xs text-slate-400">{TEAM_LABEL[r.team]}</span>
               </div>
               {r.persisted ? (
                 <CheckCircle2 className="h-4 w-4 text-green-500" />

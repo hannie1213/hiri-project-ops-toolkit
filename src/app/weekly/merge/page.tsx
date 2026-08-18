@@ -28,14 +28,16 @@ function WeeklyMergeInner() {
   const [exporting, setExporting] = useState<TeamKey | "ALL" | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string>("");
-  const [counts, setCounts] = useState<Record<TeamKey, number>>({ PROJECT: 0, AFTERSALES: 0, QA: 0 });
+  const [counts, setCounts] = useState<Record<TeamKey, number>>({ A: 0, B: 0, C: 0, QA: 0, AFTERSALES: 0 });
 
   const loadMerged = useCallback(() => {
     const reports: WeeklyReport[] = listWeekly(weekKey);
     setCounts({
-      PROJECT: reports.filter((r) => r.team === "PROJECT").length,
-      AFTERSALES: reports.filter((r) => r.team === "AFTERSALES").length,
+      A: reports.filter((r) => r.team === "A").length,
+      B: reports.filter((r) => r.team === "B").length,
+      C: reports.filter((r) => r.team === "C").length,
       QA: reports.filter((r) => r.team === "QA").length,
+      AFTERSALES: reports.filter((r) => r.team === "AFTERSALES").length,
     });
     const result = buildMerge(weekKey, reports);
     setSubmitted(result.submitted);

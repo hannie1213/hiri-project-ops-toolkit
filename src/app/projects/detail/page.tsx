@@ -7,7 +7,7 @@ import { AlertTriangle, ArrowLeft, CalendarDays, CheckCircle2, Pencil, RefreshCw
 import { Button, Card, CardHeader } from "@/components/ui";
 import { StatusBadge } from "@/components/ui/badge";
 import ProjectForm, { type ProjectFormValue } from "@/components/project-form";
-import { getProject, evaluate, updateProject, deleteProject, subscribe, type TeamKey, type SubTeamKey } from "@/lib/store";
+import { getProject, evaluate, updateProject, deleteProject, subscribe, type TeamKey } from "@/lib/store";
 import { fmtDate } from "@/lib/utils";
 
 type DetailView = {
@@ -18,7 +18,6 @@ type DetailView = {
   pmRaw: string | null;
   pmList: string[];
   team: TeamKey | null;
-  subTeam: SubTeamKey;
   startDate: string | null;
   endDate: string | null;
   remark: string | null;
@@ -57,7 +56,6 @@ function toView(id: string): DetailView | null {
     pmRaw: p.pmRaw,
     pmList: p.managers,
     team: p.team,
-    subTeam: p.subTeam,
     startDate: p.startDate,
     endDate: p.endDate,
     remark: p.remark,
@@ -118,7 +116,6 @@ function ProjectDetailInner() {
         category: v.category,
         pmRaw: v.pmRaw,
         team: v.team,
-        subTeam: v.subTeam,
         startDate: v.startDate || null,
         endDate: v.endDate || null,
         remark: v.remark,
@@ -188,7 +185,6 @@ function ProjectDetailInner() {
               category: data.category ?? "",
               pmRaw: data.pmRaw ?? "",
               team: data.team,
-              subTeam: data.subTeam,
               startDate: data.startDate ? data.startDate.slice(0, 10) : "",
               endDate: data.endDate ? data.endDate.slice(0, 10) : "",
               remark: data.remark ?? "",

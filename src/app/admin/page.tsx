@@ -4,18 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Database, FileSpreadsheet, FolderPlus, History, Plus, RotateCcw, ScrollText, Trash2, UserPlus, Users } from "lucide-react";
 import { Button, Card, CardHeader, Input, Select } from "@/components/ui";
-import { listMembers, createMember, updateMember, deleteMember, listImports, exportProjects, subscribe, resetToDefaultMembers, TEAMS, TEAM_LABEL, SUBTEAM_LABEL, SUB_TEAMS, type TeamKey, type SubTeamKey, type Member, type ImportLog } from "@/lib/store";
+import { listMembers, createMember, updateMember, deleteMember, listImports, exportProjects, subscribe, resetToDefaultMembers, TEAMS, TEAM_LABEL, type TeamKey, type Member, type ImportLog } from "@/lib/store";
 import { buildProgressWorkbook } from "@/lib/excel";
 
 export default function AdminPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [imports, setImports] = useState<ImportLog[]>([]);
   const [newName, setNewName] = useState("");
-  const [newTeam, setNewTeam] = useState<TeamKey>("PROJECT");
-  const [newSubTeam, setNewSubTeam] = useState<SubTeamKey>("A");
+  const [newTeam, setNewTeam] = useState<TeamKey>("A");
   const [confirmClear, setConfirmClear] = useState(false);
   const [bulkText, setBulkText] = useState("");
-  const [bulkDefaultTeam, setBulkDefaultTeam] = useState<TeamKey>("PROJECT");
+  const [bulkDefaultTeam, setBulkDefaultTeam] = useState<TeamKey>("A");
   const [bulkMsg, setBulkMsg] = useState("");
 
   const load = useCallback(() => {
@@ -32,20 +31,13 @@ export default function AdminPage() {
   function addMember() {
     const name = newName.trim();
     if (!name) return;
-    const sub = newTeam === "PROJECT" ? newSubTeam : "NONE";
-    createMember(name, newTeam, sub);
+    createMember(name, newTeam);
     setNewName("");
     load();
   }
 
   function applyTeam(m: Member, team: TeamKey) {
-    const sub = team === "PROJECT" ? m.subTeam : "NONE";
-    updateMember(m.id, { team, subTeam: sub });
-    load();
-  }
-
-  function applySubTeam(m: Member, subTeam: SubTeamKey) {
-    updateMember(m.id, { subTeam });
+    updateMember(m.id, { team });
     load();
   }
 
@@ -81,27 +73,25 @@ export default function AdminPage() {
     let skipped = 0;
     const existing = new Set(members.map((m) => m.name));
     for (const raw of lines) {
-      // 支持 "姓名 [项目组/A组]" / "姓名 售后组" 等写法
-      const m = raw.match(/^(.+?)\s*[\[【(（]\s*(项目组|售后组|质安组|PROJECT|AFTERSALES|QA|[ABC]组|[ABC])\s*[\]】)）]\s*$/i);
+      // 支持 "姓名 [A组]" / "姓名 质安组" 等写法
+      const m = raw.match(/^(.+?)\s*[\[【(（]\s*(项目组A组|项目组B组|项目组C组|项目组|售后组|质安组|A组|B组|C组|A|B|C|AFTERSALES|QA)\s*[\]】)）]\s*$/i);
       let name = raw;
       let team: TeamKey = bulkDefaultTeam;
-      let sub: SubTeamKey = team === "PROJECT" ? "A" : "NONE";
       if (m) {
         name = m[1].trim();
-        const tag = m[2].toUpperCase();
-        if (tag === "项目组" || tag === "PROJECT") team = "PROJECT";
-        else if (tag === "售后组" || tag === "AFTERSALES") team = "AFTERSALES";
-        else if (tag === "质安组" || tag === "QA") team = "QA";
-        else if (tag === "A" || tag === "A组") { team = "PROJECT"; sub = "A"; }
-        else if (tag === "B" || tag === "B组") { team = "PROJECT"; sub = "B"; }
-        else if (tag === "C" || tag === "C组") { team = "PROJECT"; sub = "C"; }
-        if (team !== "PROJECT") sub = "NONE";
+        const tag = m[2].toUpperCase().replace(/组$/, "");
+        if (tag === "A" || tag === "项目组A") team = "A";
+        else if (tag === "B" || tag === "项目组B") team = "B";
+        else if (tag === "C" || tag === "项目组C") team = "C";
+        else if (tag === "AFTERSALES") team = "AFTERSALES";
+        else if (tag === "QA") team = "QA";
+        else if (tag === "项目组") team = bulkDefaultTeam; // 含糊的"项目组"用默认
       }
       if (!name || existing.has(name)) {
         skipped++;
         continue;
       }
-      createMember(name, team, sub);
+      createMember(name, team);
       existing.add(name);
       added++;
     }
@@ -190,20 +180,9 @@ export default function AdminPage() {
             <Input value={newName} onChange={setNewName} placeholder="成员姓名" className="w-32" />
             <Select
               value={newTeam}
-              onChange={(v) => {
-                const t = v as TeamKey;
-                setNewTeam(t);
-                if (t !== "PROJECT") setNewSubTeam("NONE");
-              }}
+              onChange={(v) => setNewTeam(v as TeamKey)}
               options={TEAMS.map((t) => ({ value: t, label: TEAM_LABEL[t] }))}
             />
-            {newTeam === "PROJECT" && (
-              <Select
-                value={newSubTeam}
-                onChange={(v) => setNewSubTeam(v as SubTeamKey)}
-                options={SUB_TEAMS.PROJECT.map((s) => ({ value: s, label: SUBTEAM_LABEL[s] }))}
-              />
-            )}
             <Button variant="primary" onClick={addMember} disabled={!newName.trim()}>
               <Plus className="h-4 w-4" /> 添加
             </Button>
@@ -243,8 +222,7 @@ export default function AdminPage() {
               <thead>
                 <tr className="border-b bg-slate-50 text-xs text-slate-500">
                   <th className="px-3 py-2 font-medium">姓名</th>
-                  <th className="px-3 py-2 font-medium">大组</th>
-                  <th className="px-3 py-2 font-medium">子组</th>
+                  <th className="px-3 py-2 font-medium">所属项目组</th>
                   <th className="px-3 py-2 font-medium">启用</th>
                   <th className="px-3 py-2 font-medium">操作</th>
                 </tr>
@@ -261,17 +239,6 @@ export default function AdminPage() {
                       />
                     </td>
                     <td className="px-3 py-2">
-                      {m.team === "PROJECT" ? (
-                        <Select
-                          value={m.subTeam}
-                          onChange={(v) => applySubTeam(m, v as SubTeamKey)}
-                          options={SUB_TEAMS.PROJECT.map((s) => ({ value: s, label: SUBTEAM_LABEL[s] }))}
-                        />
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
                       <input type="checkbox" checked={m.active} onChange={() => toggleActive(m)} className="h-4 w-4 accent-blue-600" />
                     </td>
                     <td className="px-3 py-2">
@@ -283,7 +250,7 @@ export default function AdminPage() {
                 ))}
                 {members.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-8 text-center text-slate-400">
+                    <td colSpan={4} className="px-3 py-8 text-center text-slate-400">
                       暂无成员，先添加周报成员名单
                     </td>
                   </tr>

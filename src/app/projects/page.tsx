@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Filter, Plus, RefreshCw, Search, Users } from "lucide-react";
 import { Card, Input, Select, Button } from "@/components/ui";
 import { StatusBadge } from "@/components/ui/badge";
-import { listProjects, evaluate, listMembers, subscribe, TEAMS, TEAM_LABEL, SUBTEAM_LABEL, SUB_TEAMS, type TeamKey, type SubTeamKey } from "@/lib/store";
+import { listProjects, evaluate, listMembers, subscribe, TEAMS, TEAM_LABEL, type TeamKey } from "@/lib/store";
 import { fmtDate } from "@/lib/utils";
 
 type ProjectRow = {
@@ -16,7 +16,6 @@ type ProjectRow = {
   pmRaw: string | null;
   pmList: string[];
   team: TeamKey | null;
-  subTeam: SubTeamKey;
   status: string;
   warning: string | null;
   milestones: Array<{ name: string; plannedDate: string | null; actualDate: string | null }>;
@@ -33,14 +32,9 @@ const STATUS_FILTERS = [
   { value: "NOT_STARTED", label: "未开始" },
 ];
 
-const TEAM_FILTERS = [
-  { value: "ALL", label: "全部组" },
+const TEAM_FILTER_OPTIONS = [
+  { value: "ALL", label: "全部项目组" },
   ...TEAMS.map((t) => ({ value: t, label: TEAM_LABEL[t] })),
-];
-
-const SUBTEAM_FILTERS = [
-  { value: "ALL", label: "全部子组" },
-  ...SUB_TEAMS.PROJECT.map((s) => ({ value: s, label: SUBTEAM_LABEL[s] })),
 ];
 
 function buildRows(): ProjectRow[] {
@@ -53,7 +47,6 @@ function buildRows(): ProjectRow[] {
       pmRaw: p.pmRaw,
       pmList: p.managers,
       team: p.team,
-      subTeam: p.subTeam,
       status: ev.statusInfo.status,
       warning: ev.statusInfo.warning,
       milestones: p.milestones.map((m) => ({
@@ -77,7 +70,6 @@ function ProjectsPageInner() {
   const sp = useSearchParams();
   const [status, setStatus] = useState(sp.get("status") || "ALL");
   const [team, setTeam] = useState<TeamKey | "ALL">((sp.get("team") as TeamKey) || "ALL");
-  const [subTeam, setSubTeam] = useState<SubTeamKey | "ALL">((sp.get("sub") as SubTeamKey) || "ALL");
   const [q, setQ] = useState("");
   const [pmName, setPmName] = useState("");
   const [rows, setRows] = useState<ProjectRow[]>([]);
@@ -105,13 +97,12 @@ function ProjectsPageInner() {
     return rows.filter((p) => {
       if (status !== "ALL" && p.status !== status) return false;
       if (team !== "ALL" && p.team !== team) return false;
-      if (team === "PROJECT" && subTeam !== "ALL" && p.subTeam !== subTeam) return false;
       if (qTrim && !p.name.includes(qTrim) && !(p.code || "").includes(qTrim)) return false;
       if (pmTrim && !p.pmList.some((n) => n.includes(pmTrim))) return false;
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, status, team, subTeam, q, pmName]);
+  }, [rows, status, team, q, pmName]);
 
   return (
     <div className="space-y-4">
@@ -153,19 +144,9 @@ function ProjectsPageInner() {
             <Select value={status} onChange={setStatus} options={STATUS_FILTERS} />
             <Select
               value={team}
-              onChange={(v) => {
-                setTeam(v as TeamKey | "ALL");
-                if (v !== "PROJECT") setSubTeam("ALL");
-              }}
-              options={TEAM_FILTERS}
+              onChange={(v) => setTeam(v as TeamKey | "ALL")}
+              options={TEAM_FILTER_OPTIONS}
             />
-            {team === "PROJECT" && (
-              <Select
-                value={subTeam}
-                onChange={(v) => setSubTeam(v as SubTeamKey | "ALL")}
-                options={SUBTEAM_FILTERS}
-              />
-            )}
           </div>
           <Button variant="secondary" onClick={load}>
             <RefreshCw className="h-4 w-4" /> 刷新
@@ -210,9 +191,7 @@ function ProjectRowView({ p }: { p: ProjectRow }) {
   const doneCount = p.milestones.filter((m) => m.actualDate).length;
   const nextNode = p.milestones.find((m) => !m.actualDate);
 
-  const groupLabel = p.team
-    ? TEAM_LABEL[p.team] + (p.team === "PROJECT" && p.subTeam !== "NONE" ? ` · ${SUBTEAM_LABEL[p.subTeam]}` : "")
-    : "未分组";
+  const groupLabel = p.team ? TEAM_LABEL[p.team] : "未分组";
 
   return (
     <tr className="transition hover:bg-slate-50">

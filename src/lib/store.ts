@@ -6,22 +6,27 @@
 import { evaluateProject, type ProjectStatusInfo } from "@/lib/status";
 import { splitPm, uid, fmtDate, parseDate } from "@/lib/utils";
 
-export type TeamKey = "PROJECT" | "AFTERSALES" | "QA";
+/** 5 个平级组别（项目组分 A/B/C，与质安组/售后组并列） */
+export type TeamKey = "A" | "B" | "C" | "QA" | "AFTERSALES";
 export type SubTeamKey = "A" | "B" | "C" | "NONE";
 
-export const TEAMS: TeamKey[] = ["PROJECT", "AFTERSALES", "QA"];
+export const TEAMS: TeamKey[] = ["A", "B", "C", "QA", "AFTERSALES"];
 
 export const TEAM_LABEL: Record<TeamKey, string> = {
-  PROJECT: "项目组",
-  AFTERSALES: "售后组",
+  A: "项目组 A 组",
+  B: "项目组 B 组",
+  C: "项目组 C 组",
   QA: "质安组",
+  AFTERSALES: "售后组",
 };
 
-/** 大组 → 可用的小组列表（只有项目组分 A/B/C） */
+/** 大组 → 可用的小组列表（保留 API，向后兼容；只有项目组分 A/B/C） */
 export const SUB_TEAMS: Record<TeamKey, SubTeamKey[]> = {
-  PROJECT: ["A", "B", "C"],
-  AFTERSALES: ["NONE"],
+  A: ["A"],
+  B: ["B"],
+  C: ["C"],
   QA: ["NONE"],
+  AFTERSALES: ["NONE"],
 };
 
 export const SUBTEAM_LABEL: Record<SubTeamKey, string> = {
@@ -30,6 +35,11 @@ export const SUBTEAM_LABEL: Record<SubTeamKey, string> = {
   C: "C 组",
   NONE: "—",
 };
+
+/** 根据 team 自动得到 subTeam（A/B/C → 自身；其他 → NONE） */
+export function autoSubTeam(team: TeamKey): SubTeamKey {
+  return team === "A" || team === "B" || team === "C" ? team : "NONE";
+}
 
 export interface Milestone {
   id: string;
@@ -55,7 +65,6 @@ export interface Project {
   milestones: Milestone[];
   managers: string[];
   team: TeamKey | null;
-  subTeam: SubTeamKey;
 }
 
 export interface Member {
@@ -133,9 +142,9 @@ export function listProjects(): Project[] {
   const raw = read<Project[]>(KEYS.projects, []);
   let migrated = false;
   const normalized = raw.map((p) => {
-    if (p.team === undefined || p.subTeam === undefined) {
+    if (p.team === undefined) {
       migrated = true;
-      return { ...p, team: p.team ?? null, subTeam: p.subTeam ?? "NONE" };
+      return { ...p, team: null };
     }
     return p;
   });
@@ -171,12 +180,11 @@ function syncManagers(pmRaw: string | null): string[] {
 
 function refreshStatus(p: Project): Project {
   // evaluateProject 已在 evaluate() 中计算，这里仅确保 managers 与 pmRaw 同步
-  // team/subTeam 由管理员在表单中手动指定，不做自动推断
+  // team 由管理员在表单中手动指定，不做自动推断
   return {
     ...p,
     managers: syncManagers(p.pmRaw),
     team: p.team ?? null,
-    subTeam: p.subTeam ?? "NONE",
   };
 }
 
@@ -189,7 +197,6 @@ export interface ProjectInput {
   endDate?: string | null;
   remark?: string | null;
   team?: TeamKey | null;
-  subTeam?: SubTeamKey;
   milestones?: { name: string; plannedDate: string | null; actualDate: string | null }[];
 }
 
@@ -218,7 +225,6 @@ export function createProject(input: ProjectInput): Project {
     })),
     managers: [],
     team: input.team ?? null,
-    subTeam: input.subTeam ?? "NONE",
   });
   projects.push(p);
   persistProjects(projects);
@@ -242,7 +248,6 @@ export function updateProject(id: string, input: ProjectInput): Project | undefi
     version: prev.version + 1,
     updatedBy: "管理员",
     team: input.team ?? prev.team,
-    subTeam: input.subTeam ?? prev.subTeam,
     milestones: (input.milestones ?? []).map((m, i) => ({
       id: uid("m_"),
       name: m.name,
@@ -347,7 +352,6 @@ export function importProjects(
             })),
             managers: [],
             team: null,
-            subTeam: "NONE",
           })
         );
         created++;
@@ -391,44 +395,44 @@ export function listImports(): ImportLog[] {
 /* ----------------------------- 成员名单 ----------------------------- */
 
 /** 默认周报成员名单（首次加载时自动写入，管理员可自行增删改） */
-const DEFAULT_MEMBERS: Array<{ name: string; team: TeamKey; subTeam: SubTeamKey }> = [
+const DEFAULT_MEMBERS: Array<{ name: string; team: TeamKey }> = [
   // 项目组 A 组
-  { name: "严志展", team: "PROJECT", subTeam: "A" },
-  { name: "詹小坊", team: "PROJECT", subTeam: "A" },
-  { name: "代友林", team: "PROJECT", subTeam: "A" },
-  { name: "左凯", team: "PROJECT", subTeam: "A" },
-  { name: "陈俊明", team: "PROJECT", subTeam: "A" },
-  { name: "林锦", team: "PROJECT", subTeam: "A" },
-  { name: "吴杰", team: "PROJECT", subTeam: "A" },
-  { name: "陈默涵", team: "PROJECT", subTeam: "A" },
-  { name: "焦佳豪", team: "PROJECT", subTeam: "A" },
-  { name: "温彩德", team: "PROJECT", subTeam: "A" },
+  { name: "严志展", team: "A" },
+  { name: "詹小坊", team: "A" },
+  { name: "代友林", team: "A" },
+  { name: "左凯", team: "A" },
+  { name: "陈俊明", team: "A" },
+  { name: "林锦", team: "A" },
+  { name: "吴杰", team: "A" },
+  { name: "陈默涵", team: "A" },
+  { name: "焦佳豪", team: "A" },
+  { name: "温彩德", team: "A" },
   // 项目组 B 组
-  { name: "杨郑明", team: "PROJECT", subTeam: "B" },
-  { name: "林颖喆", team: "PROJECT", subTeam: "B" },
-  { name: "谷浩天", team: "PROJECT", subTeam: "B" },
-  { name: "张耿标", team: "PROJECT", subTeam: "B" },
-  { name: "吴毅强", team: "PROJECT", subTeam: "B" },
-  { name: "蔡圣炜", team: "PROJECT", subTeam: "B" },
-  { name: "赵龙", team: "PROJECT", subTeam: "B" },
-  { name: "黄传武", team: "PROJECT", subTeam: "B" },
-  { name: "郑凯轩", team: "PROJECT", subTeam: "B" },
-  { name: "李志浩", team: "PROJECT", subTeam: "B" },
+  { name: "杨郑明", team: "B" },
+  { name: "林颖喆", team: "B" },
+  { name: "谷浩天", team: "B" },
+  { name: "张耿标", team: "B" },
+  { name: "吴毅强", team: "B" },
+  { name: "蔡圣炜", team: "B" },
+  { name: "赵龙", team: "B" },
+  { name: "黄传武", team: "B" },
+  { name: "郑凯轩", team: "B" },
+  { name: "李志浩", team: "B" },
   // 项目组 C 组
-  { name: "魏向中", team: "PROJECT", subTeam: "C" },
-  { name: "周飞明", team: "PROJECT", subTeam: "C" },
-  { name: "蒋家苓", team: "PROJECT", subTeam: "C" },
-  { name: "陈权", team: "PROJECT", subTeam: "C" },
-  { name: "王一帆", team: "PROJECT", subTeam: "C" },
-  { name: "林子涵", team: "PROJECT", subTeam: "C" },
-  { name: "郭柳江", team: "PROJECT", subTeam: "C" },
-  { name: "岳佳成", team: "PROJECT", subTeam: "C" },
-  { name: "阮腾伟", team: "PROJECT", subTeam: "C" },
+  { name: "魏向中", team: "C" },
+  { name: "周飞明", team: "C" },
+  { name: "蒋家苓", team: "C" },
+  { name: "陈权", team: "C" },
+  { name: "王一帆", team: "C" },
+  { name: "林子涵", team: "C" },
+  { name: "郭柳江", team: "C" },
+  { name: "岳佳成", team: "C" },
+  { name: "阮腾伟", team: "C" },
   // 质安组
-  { name: "杜思明", team: "QA", subTeam: "NONE" },
+  { name: "杜思明", team: "QA" },
   // 售后组
-  { name: "谢木江", team: "AFTERSALES", subTeam: "NONE" },
-  { name: "刘仲武", team: "AFTERSALES", subTeam: "NONE" },
+  { name: "谢木江", team: "AFTERSALES" },
+  { name: "刘仲武", team: "AFTERSALES" },
 ];
 
 function seedDefaultMembers(): Member[] {
@@ -436,7 +440,7 @@ function seedDefaultMembers(): Member[] {
     id: `mem_default_${i}`,
     name: d.name,
     team: d.team,
-    subTeam: d.subTeam,
+    subTeam: autoSubTeam(d.team),
     active: true,
   }));
 }
@@ -459,9 +463,9 @@ export function resetToDefaultMembers(): Member[] {
   return seeded;
 }
 
-export function createMember(name: string, team: TeamKey, subTeam: SubTeamKey = "NONE"): Member {
+export function createMember(name: string, team: TeamKey, _subTeam?: SubTeamKey): Member {
   const members = read<Member[]>(KEYS.members, []);
-  const m: Member = { id: uid("mem_"), name: name.trim(), team, subTeam, active: true };
+  const m: Member = { id: uid("mem_"), name: name.trim(), team, subTeam: autoSubTeam(team), active: true };
   members.push(m);
   write(KEYS.members, members);
   return m;
@@ -496,7 +500,7 @@ export function upsertWeekly(input: {
   memberId: string;
   memberName: string;
   team: TeamKey;
-  subTeam: SubTeamKey;
+  subTeam?: SubTeamKey;
   content: string;
   planned: string | null;
   issues: string | null;
@@ -504,12 +508,13 @@ export function upsertWeekly(input: {
   const all = read<WeeklyReport[]>(KEYS.weekly, []);
   const idx = all.findIndex((r) => r.weekKey === input.weekKey && r.memberId === input.memberId);
   const now = new Date().toISOString();
+  const fixed = { ...input, subTeam: autoSubTeam(input.team) };
   if (idx >= 0) {
-    all[idx] = { ...all[idx], ...input, updatedAt: now };
+    all[idx] = { ...all[idx], ...fixed, updatedAt: now };
     write(KEYS.weekly, all);
     return all[idx];
   }
-  const r: WeeklyReport = { id: uid("w_"), updatedAt: now, ...input };
+  const r: WeeklyReport = { id: uid("w_"), updatedAt: now, ...fixed };
   all.push(r);
   write(KEYS.weekly, all);
   return r;

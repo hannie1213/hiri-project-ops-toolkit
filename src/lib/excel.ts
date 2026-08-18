@@ -394,13 +394,13 @@ export async function buildMergeWorkbook(
   reports: Array<{
     memberId: string;
     memberName: string;
-    team: "PROJECT" | "AFTERSALES" | "QA";
+    team: "A" | "B" | "C" | "QA" | "AFTERSALES";
     subTeam?: "A" | "B" | "C" | "NONE";
     content: string;
     planned: string | null;
     issues: string | null;
   }>,
-  teamFilter: "PROJECT" | "AFTERSALES" | "QA"
+  teamFilter: "A" | "B" | "C" | "QA" | "AFTERSALES"
 ): Promise<Uint8Array> {
   const TEAM_LABEL: Record<string, string> = { PROJECT: "项目组", AFTERSALES: "售后组", QA: "质安组" };
   const SUBTEAM_LABEL: Record<string, string> = { A: "A 组", B: "B 组", C: "C 组", NONE: "—" };

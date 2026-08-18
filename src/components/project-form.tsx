@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AlertCircle, ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react";
 import { Button, Card, CardHeader, Input, Select } from "@/components/ui";
-import { TEAMS, TEAM_LABEL, SUBTEAM_LABEL, SUB_TEAMS, type TeamKey, type SubTeamKey } from "@/lib/store";
+import { TEAMS, TEAM_LABEL, type TeamKey } from "@/lib/store";
 
 export type MilestoneDraft = {
   name: string;
@@ -18,7 +18,6 @@ export type ProjectFormValue = {
   category: string;
   pmRaw: string;
   team: TeamKey | null;
-  subTeam: SubTeamKey;
   startDate: string;
   endDate: string;
   remark: string;
@@ -113,28 +112,18 @@ export default function ProjectForm({
           <Field label="负责人" desc="多人用 / 、 ， , ; 分隔，自动拆分">
             <Input value={form.pmRaw} onChange={(v) => set("pmRaw", v)} placeholder="张三/李四、王五" />
           </Field>
-          <Field label="所属组" desc="用于项目管理按组筛选">
-            <div className="flex items-center gap-2">
-              <Select
-                value={form.team ?? "NONE"}
-                onChange={(v) => {
-                  const t = v === "NONE" ? null : (v as TeamKey);
-                  set("team", t);
-                  if (t !== "PROJECT") set("subTeam", "NONE");
-                }}
-                options={[
-                  { value: "NONE", label: "未分组" },
-                  ...TEAMS.map((t) => ({ value: t, label: TEAM_LABEL[t] })),
-                ]}
-              />
-              {form.team === "PROJECT" && (
-                <Select
-                  value={form.subTeam}
-                  onChange={(v) => set("subTeam", v as SubTeamKey)}
-                  options={SUB_TEAMS.PROJECT.map((s) => ({ value: s, label: SUBTEAM_LABEL[s] }))}
-                />
-              )}
-            </div>
+          <Field label="所属项目组" desc="用于项目管理按组筛选">
+            <Select
+              value={form.team ?? "NONE"}
+              onChange={(v) => {
+                const t = v === "NONE" ? null : (v as TeamKey);
+                set("team", t);
+              }}
+              options={[
+                { value: "NONE", label: "未分组" },
+                ...TEAMS.map((t) => ({ value: t, label: TEAM_LABEL[t] })),
+              ]}
+            />
           </Field>
           <Field label="计划开始日期">
             <Input type="date" value={form.startDate} onChange={(v) => set("startDate", v)} />
