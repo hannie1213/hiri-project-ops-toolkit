@@ -3,21 +3,12 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Check, ClipboardCopy, FileSpreadsheet, Loader2, Merge, RefreshCw, Users } from "lucide-react";
+import { Check, ClipboardCopy, FileSpreadsheet, Loader2, Merge, RefreshCw } from "lucide-react";
 import { Button, Card, CardHeader } from "@/components/ui";
-import { listWeekly, subscribe, type WeeklyReport } from "@/lib/store";
-import { buildMerge, mergeFileName, downloadText } from "@/lib/weekly-store";
+import { listWeekly, subscribe, TEAMS, TEAM_LABEL, SUBTEAM_LABEL, type TeamKey, type WeeklyReport, type SubTeamKey } from "@/lib/store";
+import { buildMerge } from "@/lib/weekly-store";
 import { buildMergeWorkbook } from "@/lib/excel";
 import { mondayOf } from "@/lib/utils";
-
-const TEAMS = [
-  { key: "ALL", label: "全部合并" },
-  { key: "PROJECT", label: "项目组" },
-  { key: "AFTERSALES", label: "售后组" },
-  { key: "QA", label: "质安组" },
-];
-
-type ExportMode = "member" | "team";
 
 export default function WeeklyMergePage() {
   return (
@@ -30,16 +21,22 @@ export default function WeeklyMergePage() {
 function WeeklyMergeInner() {
   const sp = useSearchParams();
   const [weekKey, setWeekKey] = useState(sp.get("weekKey") || mondayOf());
-  const [team, setTeam] = useState("ALL");
+  const [team, setTeam] = useState<TeamKey | "ALL">("ALL");
   const [content, setContent] = useState("");
   const [submitted, setSubmitted] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState<TeamKey | "ALL" | null>(null);
   const [copied, setCopied] = useState(false);
-  const [error, setError] = useState("");
-  const [exportMode, setExportMode] = useState<ExportMode>("member");
+  const [error, setError] = useState<string>("");
+  const [counts, setCounts] = useState<Record<TeamKey, number>>({ PROJECT: 0, AFTERSALES: 0, QA: 0 });
 
   const loadMerged = useCallback(() => {
     const reports: WeeklyReport[] = listWeekly(weekKey);
+    setCounts({
+      PROJECT: reports.filter((r) => r.team === "PROJECT").length,
+      AFTERSALES: reports.filter((r) => r.team === "AFTERSALES").length,
+      QA: reports.filter((r) => r.team === "QA").length,
+    });
     const result = buildMerge(weekKey, reports);
     setSubmitted(result.submitted);
     setContent(team === "ALL" ? result.allText : result.teamTexts[team] ?? "");
@@ -76,23 +73,26 @@ function WeeklyMergeInner() {
     );
   }
 
-  async function downloadExcel() {
+  // 三大组分别导出 → 3 个独立 xlsx
+  async function downloadTeamExcel(targetTeam: TeamKey) {
     setError("");
+    setExporting(targetTeam);
     try {
       const reports = listWeekly(weekKey);
-      const result = buildMerge(weekKey, reports);
-      const buf = await buildMergeWorkbook(weekKey, reports, exportMode);
+      const buf = await buildMergeWorkbook(weekKey, reports, targetTeam);
       const blob = new Blob([buf as BlobPart], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `周报合并_${weekKey}_${exportMode === "member" ? "成员分簿" : "小组分簿"}.xlsx`;
+      a.download = `${TEAM_LABEL[targetTeam]}周报_${weekKey}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      setError("下载失败");
+    } catch (e) {
+      setError(`${TEAM_LABEL[targetTeam]}：${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setExporting(null);
     }
   }
 
@@ -101,7 +101,7 @@ function WeeklyMergeInner() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">周报汇总合并</h1>
-          <p className="mt-0.5 text-sm text-slate-500">按项目组/售后组/质安组聚合，保留每位成员提交的原始格式</p>
+          <p className="mt-0.5 text-sm text-slate-500">按大组（项目组 / 质安组 / 售后组）分别合并导出，每个成员的周报一个 sheet</p>
         </div>
         <Link href="/weekly" className="text-sm text-slate-500 hover:text-slate-700">
           返回周报
@@ -121,19 +121,32 @@ function WeeklyMergeInner() {
         <div className="flex flex-wrap items-center gap-4 p-5">
           <label className="text-sm text-slate-600">
             周次：
-            <input type="date" value={weekKey} onChange={(e) => e.target.value && setWeekKey(e.target.value)} className="ml-2 rounded-lg border px-3 py-1.5 text-sm" />
+            <input
+              type="date"
+              value={weekKey}
+              onChange={(e) => e.target.value && setWeekKey(e.target.value)}
+              className="ml-2 rounded-lg border px-3 py-1.5 text-sm"
+            />
           </label>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-slate-600">视图：</span>
+            <button
+              onClick={() => setTeam("ALL")}
+              className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                team === "ALL" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              全部合并
+            </button>
             {TEAMS.map((t) => (
               <button
-                key={t.key}
-                onClick={() => setTeam(t.key)}
+                key={t}
+                onClick={() => setTeam(t)}
                 className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                  team === t.key ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  team === t ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
-                {t.label}
+                {TEAM_LABEL[t]}
               </button>
             ))}
           </div>
@@ -180,39 +193,52 @@ function WeeklyMergeInner() {
 
       <Card>
         <CardHeader
-          title="导出 Excel 合并簿"
-          desc="每组/每位成员单独一个 sheet，便于转发与归档"
+          title="导出 Excel 合并簿（按大组分别下载）"
+          desc="每个大组独立生成一个 xlsx；项目组按 A/B/C 小组排序，每个成员一个 sheet（sheet 名 = 成员姓名）"
         />
-        <div className="flex flex-wrap items-center gap-4 p-5">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-600">分簿方式：</span>
-            <button
-              onClick={() => setExportMode("member")}
-              className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm transition ${
-                exportMode === "member" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              <Users className="h-4 w-4" /> 每个成员一个 sheet
-            </button>
-            <button
-              onClick={() => setExportMode("team")}
-              className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm transition ${
-                exportMode === "team" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              <FileSpreadsheet className="h-4 w-4" /> 每个小组一个 sheet
-            </button>
-          </div>
-          <Button variant="primary" onClick={downloadExcel}>
-            <FileSpreadsheet className="h-4 w-4" /> 下载 Excel
-          </Button>
+        <div className="grid gap-3 p-5 sm:grid-cols-3">
+          {TEAMS.map((t) => {
+            const isExporting = exporting === t;
+            const empty = counts[t] === 0;
+            return (
+              <div
+                key={t}
+                className={`flex items-center justify-between rounded-lg border p-4 ${
+                  empty ? "border-slate-200 bg-slate-50" : "border-blue-200 bg-blue-50/40"
+                }`}
+              >
+                <div>
+                  <div className="text-sm font-semibold text-slate-800">{TEAM_LABEL[t]}周报</div>
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {empty ? "本周暂无周报" : `已录入 ${counts[t]} 人`}
+                  </div>
+                </div>
+                <Button
+                  variant={empty ? "ghost" : "primary"}
+                  onClick={() => downloadTeamExcel(t)}
+                  disabled={empty || exporting !== null}
+                >
+                  {isExporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="h-4 w-4" />
+                  )}
+                  {empty ? "无数据" : "下载"}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+        <div className="border-t px-5 py-3 text-xs text-slate-500">
+          文件名示例：<code className="rounded bg-slate-100 px-1">项目组周报_2026-08-18.xlsx</code>
         </div>
       </Card>
 
       <div className="rounded-lg bg-slate-50 p-4 text-xs leading-relaxed text-slate-500">
         <p className="font-medium text-slate-600">说明</p>
-        <p>· 合并内容按「成员姓名 → 本周工作 → 下周计划 → 问题风险」结构组织，保留原始换行与格式</p>
-        <p>· 标题格式：「项目组周报(8.10-8.16)」；导出文件名带日期范围（YYYYMMDD-YYYYMMDD）</p>
+        <p>· 项目组下分 A / B / C 三个小组；合并时按小组顺序排列</p>
+        <p>· 每个成员的周报生成一个 sheet，sheet 名 = 成员姓名（重名自动加后缀）</p>
+        <p>· 每个 sheet 顶部标注「组别 · 小组 · 姓名 · 周次」，便于转发与归档</p>
         <p>· 钉钉粘贴：复制后直接 Ctrl+V 到钉钉群/文档，系统不会自动发送任何消息</p>
       </div>
     </div>

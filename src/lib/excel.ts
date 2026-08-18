@@ -385,22 +385,26 @@ export async function buildProgressWorkbook(
   return new Uint8Array(buf);
 }
 
-/** 周报合并 Excel 导出（浏览器端）。从原 weekly/merge/excel 路由迁移，去掉 Prisma。 */
+/** 周报合并 Excel 导出（浏览器端）。
+ *  - teamFilter: 限定只输出某个大组的周报（项目组 / 质安组 / 售后组）
+ *  - 每个成员一个 sheet，sheet 名 = "成员姓名"，前缀标 "大组 · 小组"
+ */
 export async function buildMergeWorkbook(
   weekKey: string,
   reports: Array<{
     memberId: string;
     memberName: string;
     team: "PROJECT" | "AFTERSALES" | "QA";
+    subTeam?: "A" | "B" | "C" | "NONE";
     content: string;
     planned: string | null;
     issues: string | null;
   }>,
-  mode: "member" | "team" = "member"
+  teamFilter: "PROJECT" | "AFTERSALES" | "QA"
 ): Promise<Uint8Array> {
   const TEAM_LABEL: Record<string, string> = { PROJECT: "项目组", AFTERSALES: "售后组", QA: "质安组" };
-  const TEAMS = ["PROJECT", "AFTERSALES", "QA"] as const;
-  type TeamKey = (typeof TEAMS)[number];
+  const SUBTEAM_LABEL: Record<string, string> = { A: "A 组", B: "B 组", C: "C 组", NONE: "—" };
+  const teamLabel = TEAM_LABEL[teamFilter];
 
   function weekRangeShort(wk: string): string {
     const start = new Date(wk + "T00:00:00");
@@ -427,13 +431,14 @@ export async function buildMergeWorkbook(
     used.add(name);
     return name;
   }
-  function appendMemberSheet(wb: ExcelJS.Workbook, r: (typeof reports)[number], teamLabel: string, range: string, used: Set<string>) {
-    const sheet = wb.addWorksheet(uniqueSheetName(`${teamLabel}-${r.memberName}`, used), { views: [{ showGridLines: false }] });
+  function appendMemberSheet(wb: ExcelJS.Workbook, r: (typeof reports)[number], range: string, used: Set<string>) {
+    const subLabel = SUBTEAM_LABEL[r.subTeam || "NONE"];
+    const sheet = wb.addWorksheet(uniqueSheetName(r.memberName, used), { views: [{ showGridLines: false }] });
     sheet.getColumn(1).width = 16;
     sheet.getColumn(2).width = 90;
     sheet.mergeCells("A1:B1");
     const t = sheet.getCell("A1");
-    t.value = `${teamLabel}周报 · ${r.memberName}（${range}）`;
+    t.value = `${teamLabel} · ${subLabel} · ${r.memberName}（${range}）`;
     t.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
     t.alignment = { horizontal: "center", vertical: "middle" };
     t.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E78" } };
@@ -462,33 +467,46 @@ export async function buildMergeWorkbook(
     }
   }
 
-  if (reports.length === 0) {
-    throw new Error("本周暂无录入的周报");
+  // 只保留本大组的数据；按 subTeam + name 排序（项目组按 A/B/C，其他按 name）
+  const subOrder: Record<string, number> = { A: 0, B: 1, C: 2, NONE: 3 };
+  const filtered = reports
+    .filter((r) => r.team === teamFilter)
+    .slice()
+    .sort((a, b) => {
+      const sa = subOrder[a.subTeam || "NONE"] ?? 9;
+      const sb = subOrder[b.subTeam || "NONE"] ?? 9;
+      if (sa !== sb) return sa - sb;
+      return (a.memberName || "").localeCompare(b.memberName || "", "zh");
+    });
+
+  if (filtered.length === 0) {
+    throw new Error(`${teamLabel}本周暂无录入的周报`);
   }
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "项目管理系统";
   wb.created = new Date();
-  wb.title = `周报合并(${weekRangeCompact(weekKey)})`;
+  wb.title = `${teamLabel}周报(${weekRangeCompact(weekKey)})`;
   const range = weekRangeShort(weekKey);
   const used = new Set<string>();
 
-  const summary = wb.addWorksheet(uniqueSheetName("周报合并", used), { views: [{ showGridLines: false }] });
-  summary.getColumn(1).width = 16;
-  summary.getColumn(2).width = 24;
-  summary.getColumn(3).width = 18;
-  summary.getColumn(4).width = 18;
+  // 首页：汇总表（仅本大组）
+  const summary = wb.addWorksheet(uniqueSheetName("汇总", used), { views: [{ showGridLines: false }] });
+  summary.getColumn(1).width = 8;
+  summary.getColumn(2).width = 18;
+  summary.getColumn(3).width = 14;
+  summary.getColumn(4).width = 60;
   summary.getColumn(5).width = 18;
   summary.mergeCells("A1:E1");
   const sc = summary.getCell("A1");
-  sc.value = `周报合并（${range}）`;
+  sc.value = `${teamLabel}周报汇总（${range}）`;
   sc.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
   sc.alignment = { horizontal: "center", vertical: "middle" };
   sc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E78" } };
   summary.getRow(1).height = 32;
 
   const headRow = summary.getRow(3);
-  ["序号", "姓名", "小组", "本周工作（前 80 字）", "提交时间"].forEach((h, i) => {
+  ["序号", "姓名", "小组", "本周工作（前 80 字）", "状态"].forEach((h, i) => {
     const c = headRow.getCell(i + 1);
     c.value = h;
     c.font = { bold: true };
@@ -496,71 +514,21 @@ export async function buildMergeWorkbook(
     c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE7F0FA" } };
   });
 
-  const byTeam = new Map<TeamKey, typeof reports>();
-  for (const t of TEAMS) byTeam.set(t, []);
-  for (const r of reports) {
-    if (TEAMS.includes(r.team as TeamKey)) byTeam.get(r.team as TeamKey)!.push(r);
-  }
+  filtered.forEach((r, i) => {
+    const row = summary.getRow(4 + i);
+    row.getCell(1).value = i + 1;
+    row.getCell(1).alignment = { horizontal: "center" };
+    row.getCell(2).value = r.memberName;
+    row.getCell(3).value = SUBTEAM_LABEL[r.subTeam || "NONE"];
+    const preview = (r.content || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    row.getCell(4).value = preview;
+    row.getCell(4).alignment = { wrapText: true };
+    row.getCell(5).value = r.content?.trim() ? "已录入" : "未填";
+  });
 
-  let idx = 0;
-  for (const team of TEAMS) {
-    for (const r of byTeam.get(team) || []) {
-      idx += 1;
-      const row = summary.getRow(3 + idx);
-      row.getCell(1).value = idx;
-      row.getCell(1).alignment = { horizontal: "center" };
-      row.getCell(2).value = r.memberName;
-      row.getCell(3).value = TEAM_LABEL[team];
-      const preview = (r.content || "").replace(/\s+/g, " ").trim().slice(0, 80);
-      row.getCell(4).value = preview;
-      row.getCell(4).alignment = { wrapText: true };
-      row.getCell(5).value = "";
-    }
-  }
-
-  if (mode === "member") {
-    for (const team of TEAMS) {
-      for (const r of byTeam.get(team) || []) {
-        appendMemberSheet(wb, r, TEAM_LABEL[team], range, used);
-      }
-    }
-  } else {
-    for (const team of TEAMS) {
-      const list = byTeam.get(team) || [];
-      const sheet = wb.addWorksheet(uniqueSheetName(`${TEAM_LABEL[team]}周报`, used), { views: [{ showGridLines: false }] });
-      sheet.getColumn(1).width = 16;
-      sheet.getColumn(2).width = 90;
-      sheet.mergeCells("A1:B1");
-      const t = sheet.getCell("A1");
-      t.value = `${TEAM_LABEL[team]}周报（${range}）`;
-      t.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
-      t.alignment = { horizontal: "center", vertical: "middle" };
-      t.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E78" } };
-      sheet.getRow(1).height = 32;
-      let cur = 3;
-      for (const r of list) {
-        sheet.mergeCells(`A${cur}:B${cur}`);
-        const nameCell = sheet.getCell(`A${cur}`);
-        nameCell.value = `【${r.memberName}】`;
-        nameCell.font = { bold: true, color: { argb: "FF1F4E78" } };
-        nameCell.alignment = { horizontal: "left", vertical: "middle" };
-        nameCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE7F0FA" } };
-        sheet.getRow(cur).height = 22;
-        cur += 1;
-        for (const [label, value] of [["本周工作", r.content], ["下周计划", r.planned], ["问题风险", r.issues]] as Array<[string, string | null | undefined]>) {
-          if (!value || !value.trim()) continue;
-          sheet.getCell(`A${cur}`).value = label;
-          sheet.getCell(`A${cur}`).font = { bold: true };
-          sheet.getCell(`A${cur}`).alignment = { vertical: "top" };
-          sheet.getCell(`B${cur}`).value = value.trim();
-          sheet.getCell(`B${cur}`).alignment = { wrapText: true, vertical: "top" };
-          const lineCount = Math.max(1, value.split("\n").length);
-          sheet.getRow(cur).height = Math.min(120, 18 * lineCount + 6);
-          cur += 1;
-        }
-        cur += 1;
-      }
-    }
+  // 每个成员一个 sheet
+  for (const r of filtered) {
+    appendMemberSheet(wb, r, range, used);
   }
 
   const buffer = await wb.xlsx.writeBuffer();

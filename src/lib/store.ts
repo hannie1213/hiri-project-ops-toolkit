@@ -7,6 +7,7 @@ import { evaluateProject, type ProjectStatusInfo } from "@/lib/status";
 import { splitPm, uid, fmtDate, parseDate } from "@/lib/utils";
 
 export type TeamKey = "PROJECT" | "AFTERSALES" | "QA";
+export type SubTeamKey = "A" | "B" | "C" | "NONE";
 
 export const TEAMS: TeamKey[] = ["PROJECT", "AFTERSALES", "QA"];
 
@@ -14,6 +15,20 @@ export const TEAM_LABEL: Record<TeamKey, string> = {
   PROJECT: "项目组",
   AFTERSALES: "售后组",
   QA: "质安组",
+};
+
+/** 大组 → 可用的小组列表（只有项目组分 A/B/C） */
+export const SUB_TEAMS: Record<TeamKey, SubTeamKey[]> = {
+  PROJECT: ["A", "B", "C"],
+  AFTERSALES: ["NONE"],
+  QA: ["NONE"],
+};
+
+export const SUBTEAM_LABEL: Record<SubTeamKey, string> = {
+  A: "A 组",
+  B: "B 组",
+  C: "C 组",
+  NONE: "—",
 };
 
 export interface Milestone {
@@ -45,6 +60,7 @@ export interface Member {
   id: string;
   name: string;
   team: TeamKey;
+  subTeam: SubTeamKey;
   active: boolean;
 }
 
@@ -54,6 +70,7 @@ export interface WeeklyReport {
   memberId: string;
   memberName: string;
   team: TeamKey;
+  subTeam: SubTeamKey;
   content: string;
   planned: string | null;
   issues: string | null;
@@ -351,9 +368,9 @@ export function listMembers(): Member[] {
   return read<Member[]>(KEYS.members, []);
 }
 
-export function createMember(name: string, team: TeamKey): Member {
+export function createMember(name: string, team: TeamKey, subTeam: SubTeamKey = "NONE"): Member {
   const members = read<Member[]>(KEYS.members, []);
-  const m: Member = { id: uid("mem_"), name: name.trim(), team, active: true };
+  const m: Member = { id: uid("mem_"), name: name.trim(), team, subTeam, active: true };
   members.push(m);
   write(KEYS.members, members);
   return m;
@@ -388,6 +405,7 @@ export function upsertWeekly(input: {
   memberId: string;
   memberName: string;
   team: TeamKey;
+  subTeam: SubTeamKey;
   content: string;
   planned: string | null;
   issues: string | null;
