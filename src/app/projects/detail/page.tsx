@@ -242,7 +242,7 @@ function ProjectDetailInner() {
           )}
 
           <Card>
-            <CardHeader title="进度节点" desc="验收节点有实际日期 → 项目判定为已验收" />
+            <CardHeader title="进度节点" desc="按节点顺序展示计划 vs 实际日期；验收节点有实际日期 → 项目判定为已验收" />
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -276,6 +276,113 @@ function ProjectDetailInner() {
                 </tbody>
               </table>
             </div>
+          </Card>
+
+          <Card>
+            <CardHeader title="项目过程" desc="按时间线展示每个节点从计划到实际完成的全过程" />
+            <ol className="relative space-y-4 p-5">
+              <span className="absolute left-[27px] top-5 bottom-5 w-px bg-slate-200" />
+              {data.evaluate.milestoneStatus.map((m, i) => {
+                const dotColor = m.hasDateIssue
+                  ? "bg-red-500"
+                  : m.actualDate
+                  ? "bg-green-500"
+                  : m.isPlannedPassed
+                  ? "bg-orange-500"
+                  : !m.plannedDate
+                  ? "bg-purple-500"
+                  : "bg-blue-500";
+                return (
+                  <li key={i} className="relative flex gap-3 pl-1">
+                    <span className={`z-10 mt-1 h-3.5 w-3.5 shrink-0 rounded-full ring-4 ring-white ${dotColor}`} />
+                    <div className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-800">
+                          阶段 {i + 1}：{m.name}
+                        </span>
+                        {m.isAcceptance && (
+                          <span className="rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">终审节点</span>
+                        )}
+                        <MilestoneFlag m={m} />
+                      </div>
+                      <div className="mt-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
+                        <div>
+                          <div className="text-slate-400">计划</div>
+                          <div className="font-medium text-slate-700">{fmt(m.plannedDate) || "未排期"}</div>
+                        </div>
+                        <div>
+                          <div className="text-slate-400">实际</div>
+                          <div className="font-medium text-slate-700">{fmt(m.actualDate) || "待补"}</div>
+                        </div>
+                        <div>
+                          <div className="text-slate-400">偏差</div>
+                          <div className="font-medium text-slate-700">
+                            {m.actualDate && m.plannedDate
+                              ? (() => {
+                                  const diff = Math.round(
+                                    (m.actualDate.getTime() - m.plannedDate.getTime()) / 86400000
+                                  );
+                                  if (diff === 0) return "按期";
+                                  return diff > 0 ? `+${diff} 天（滞后）` : `${diff} 天（提前）`;
+                                })()
+                              : m.actualMissing && m.isPlannedPassed && m.lateDays != null
+                              ? `已逾期 ${m.lateDays} 天`
+                              : m.remainingDays != null
+                              ? `距计划 ${m.remainingDays} 天`
+                              : "—"}
+                          </div>
+                        </div>
+                      </div>
+                      {m.dateIssueReason && (
+                        <div className="mt-2 flex items-center gap-1 text-xs text-red-600">
+                          <AlertTriangle className="h-3 w-3" /> {m.dateIssueReason}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </Card>
+
+          <Card>
+            <CardHeader title="项目信息" desc="基础元数据与版本信息" />
+            <dl className="grid gap-x-6 gap-y-3 p-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <dt className="text-xs text-slate-400">项目编号</dt>
+                <dd className="text-slate-700">{data.code || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">分类</dt>
+                <dd className="text-slate-700">{data.category || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">数据来源</dt>
+                <dd className="text-slate-700">
+                  {data.source === "IMPORTED" ? "Excel 导入" : data.source === "MANUAL" ? "手动创建" : data.source}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">项目起止</dt>
+                <dd className="text-slate-700">
+                  {data.startDate ? fmt(data.startDate) : "—"} ~ {data.endDate ? fmt(data.endDate) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">当前版本</dt>
+                <dd className="text-slate-700">v{data.version}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">最近操作人</dt>
+                <dd className="text-slate-700">{data.updatedBy || "—"}</dd>
+              </div>
+              {data.remark && (
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <dt className="text-xs text-slate-400">备注</dt>
+                  <dd className="text-slate-700">{data.remark}</dd>
+                </div>
+              )}
+            </dl>
           </Card>
         </>
       )}
