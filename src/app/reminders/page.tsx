@@ -18,9 +18,10 @@ type ReminderItem = {
   bucket: string;
 };
 
-const BUCKETS = ["7天内", "14天内", "30天内", "60天内"];
+const BUCKETS = ["计划待填", "7天内", "14天内", "30天内", "60天内"];
 const WINDOWS = [7, 14, 30, 60];
 const BUCKET_STYLE: Record<string, string> = {
+  "计划待填": "border-purple-200 bg-purple-50 text-purple-700",
   "7天内": "border-red-200 bg-red-50 text-red-700",
   "14天内": "border-orange-200 bg-orange-50 text-orange-700",
   "30天内": "border-amber-200 bg-amber-50 text-amber-700",
@@ -33,6 +34,17 @@ function buildItems(): ReminderItem[] {
     const ev = evaluate(p);
     if (ev.statusInfo.status === "ACCEPTED") continue;
     const ups = upcomingMilestones(ev.statusInfo);
+    for (const u of ups.noPlan) {
+      items.push({
+        projectId: p.id,
+        projectName: p.name,
+        pmList: p.managers,
+        milestoneName: u.name,
+        plannedDate: "未排期",
+        days: 0,
+        bucket: "计划待填",
+      });
+    }
     for (const w of WINDOWS) {
       for (const u of ups[w]) {
         const days = u.remainingDays ?? 0;

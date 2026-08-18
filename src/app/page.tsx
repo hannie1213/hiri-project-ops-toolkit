@@ -11,7 +11,7 @@ import { mondayOf, fmtDate } from "@/lib/utils";
 
 type DashData = {
   stats: Record<string, number>;
-  upcoming: Record<number, Array<{ projectId: string; projectName: string; milestone: { name: string; plannedDate: string | null }; days: number }>>;
+  upcoming: Record<number | "noPlan", Array<{ projectId: string; projectName: string; milestone: { name: string; plannedDate: string | null }; days: number }>>;
   lateRisks: Array<{ projectId: string; projectName: string; pm: string; milestone: { name: string; plannedDate: string | null; lateDays: number | null } }>;
   weekly: { weekKey: string; total: number; submitted: number };
   projects: Array<{ id: string; name: string; status: string }>;
@@ -23,7 +23,7 @@ function buildDash(): DashData {
   const projects = listProjects().map(evaluate);
   const stats: Record<string, number> = {};
   const lateRisks: DashData["lateRisks"] = [];
-  const upcoming: DashData["upcoming"] = { 7: [], 14: [], 30: [], 60: [] };
+  const upcoming: DashData["upcoming"] = { 7: [], 14: [], 30: [], 60: [], noPlan: [] };
   const today = new Date();
 
   for (const p of projects) {
@@ -51,6 +51,14 @@ function buildDash(): DashData {
           });
         }
       }
+    }
+    for (const u of ups.noPlan) {
+      upcoming.noPlan.push({
+        projectId: p.id,
+        projectName: p.name,
+        milestone: { name: u.name, plannedDate: null },
+        days: 0,
+      });
     }
   }
 
@@ -107,6 +115,7 @@ export default function DashboardPage() {
         {[
           { key: "TOTAL", label: "项目总数", color: "bg-slate-500", text: "text-slate-700" },
           { key: "LATE_RISK", label: "有延期风险", color: "bg-orange-500", text: "text-orange-700" },
+          { key: "NO_PLAN", label: "计划待填", color: "bg-purple-500", text: "text-purple-700" },
           { key: "DATE_ISSUE", label: "日期待核对", color: "bg-red-500", text: "text-red-700" },
           { key: "PENDING_ACTUAL", label: "待补实际日期", color: "bg-amber-500", text: "text-amber-700" },
           { key: "ACCEPTED", label: "已验收", color: "bg-green-500", text: "text-green-700" },
@@ -190,7 +199,7 @@ export default function DashboardPage() {
       <Card>
         <CardHeader
           title="到期提醒"
-          desc="按 7/14/30/60 天窗口展示临近节点（已验收项目不参与）"
+          desc="按 7/14/30/60 天窗口展示临近节点；计划未填的节点单列提示（已验收项目不参与）"
           right={
             <Link href="/reminders">
               <Button variant="ghost" className="text-xs">
@@ -199,7 +208,7 @@ export default function DashboardPage() {
             </Link>
           }
         />
-        <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-5">
           {WINDOWS.map((w) => (
             <div
               key={w}
@@ -229,6 +238,22 @@ export default function DashboardPage() {
               </div>
             </div>
           ))}
+          <div className="rounded-xl border border-purple-200 bg-purple-50 p-4 text-purple-700">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Timer className="h-4 w-4" />
+              计划待填
+            </div>
+            <div className="mt-1 text-2xl font-bold">{data.upcoming.noPlan?.length ?? 0}</div>
+            <div className="mt-3 space-y-1.5">
+              {(data.upcoming.noPlan ?? []).slice(0, 5).map((u, i) => (
+                <Link key={i} href={`/projects/detail?id=${u.projectId}`} className="block truncate text-xs hover:underline">
+                  <span className="font-medium">{u.projectName}</span> · {u.milestone.name}
+                  <span className="ml-1 text-slate-400">未排期</span>
+                </Link>
+              ))}
+              {(data.upcoming.noPlan ?? []).length === 0 && <div className="text-xs opacity-70">暂无</div>}
+            </div>
+          </div>
         </div>
       </Card>
 

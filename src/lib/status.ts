@@ -28,7 +28,7 @@ export type MilestoneView = {
 };
 
 export type ProjectStatusInfo = {
-  status: "ACCEPTED" | "DATE_ISSUE" | "LATE_RISK" | "PENDING_ACTUAL" | "ON_TRACK" | "NOT_STARTED";
+  status: "ACCEPTED" | "DATE_ISSUE" | "LATE_RISK" | "PENDING_ACTUAL" | "NO_PLAN" | "ON_TRACK" | "NOT_STARTED";
   label: string;
   milestoneStatus: MilestoneView[];
   accepted: boolean; // 已验收（被排除在跟进之外）
@@ -150,7 +150,22 @@ export function evaluateProject(
     };
   }
 
-  // R1 实际日期为空 → 待补实际日期（计划未过期也提示）
+  // R0 非验收节点既无计划日期也无实际日期 → 计划待填（状态不明确，重点提示，不可跳过）
+  const noPlanNode = views.find((v) => !v.isAcceptance && !v.plannedDate && !v.actualDate);
+  if (noPlanNode) {
+    return {
+      status: "NO_PLAN",
+      label: "计划待填",
+      milestoneStatus: views,
+      accepted: false,
+      hasDateIssue: false,
+      hasLateRisk: false,
+      hasPendingActual: true,
+      warning: `节点「${noPlanNode.name}」未填写计划日期，项目状态不明确，请尽快补全计划`,
+    };
+  }
+
+  // R1 实际日期为空（有计划日期）→ 待补实际日期
   const pendingNode = views.find((v) => v.actualMissing);
   if (pendingNode) {
     return {
@@ -191,15 +206,26 @@ export function evaluateProject(
   };
 }
 
-/** 按提醒窗口计算临近节点（已验收项目排除） */
+/** 按提醒窗口计算临近节点（已验收项目排除）。无计划日期的节点归入 noPlan 桶，不被跳过 */
 export function upcomingMilestones(
   projectStatus: ProjectStatusInfo,
   today: Date = new Date()
-): Record<number, MilestoneView[]> {
+): { 7: MilestoneView[]; 14: MilestoneView[]; 30: MilestoneView[]; 60: MilestoneView[]; noPlan: MilestoneView[] } & Record<number, MilestoneView[]> {
   const windows = [7, 14, 30, 60];
-  const result: Record<number, MilestoneView[]> = { 7: [], 14: [], 30: [], 60: [] };
+  const result: { 7: MilestoneView[]; 14: MilestoneView[]; 30: MilestoneView[]; 60: MilestoneView[]; noPlan: MilestoneView[] } & Record<number, MilestoneView[]> = {
+    7: [],
+    14: [],
+    30: [],
+    60: [],
+    noPlan: [],
+  };
   if (projectStatus.accepted) return result; // R4 已验收排除
   for (const v of projectStatus.milestoneStatus) {
+    // 计划日期缺失（且未实际完成）→ 计划待填，单独桶重点提示
+    if (v.actualMissing && !v.plannedDate && !v.isAcceptance) {
+      result.noPlan.push(v);
+      continue;
+    }
     if (v.actualMissing && v.plannedDate) {
       const days = diffDays(startOfDay(v.plannedDate), startOfDay(today));
       if (days < 0) continue; // 已过期由延期风险处理
@@ -237,6 +263,7 @@ export const STATUS_STYLE: Record<string, { badge: string; dot: string; label: s
   ACCEPTED: { badge: "bg-green-100 text-green-700 border-green-300", dot: "bg-green-500", label: "已验收" },
   DATE_ISSUE: { badge: "bg-red-100 text-red-700 border-red-300", dot: "bg-red-500", label: "日期待核对" },
   LATE_RISK: { badge: "bg-orange-100 text-orange-700 border-orange-300", dot: "bg-orange-500", label: "有延期风险" },
+  NO_PLAN: { badge: "bg-purple-100 text-purple-700 border-purple-300", dot: "bg-purple-500", label: "计划待填" },
   PENDING_ACTUAL: { badge: "bg-amber-100 text-amber-700 border-amber-300", dot: "bg-amber-500", label: "待补实际日期" },
   ON_TRACK: { badge: "bg-blue-100 text-blue-700 border-blue-300", dot: "bg-blue-500", label: "正常推进" },
   NOT_STARTED: { badge: "bg-gray-100 text-gray-600 border-gray-300", dot: "bg-gray-400", label: "未开始" },
