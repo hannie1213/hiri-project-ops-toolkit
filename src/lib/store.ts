@@ -390,7 +390,65 @@ export function listImports(): ImportLog[] {
 
 /* ----------------------------- 成员名单 ----------------------------- */
 
+/** 默认周报成员名单（首次加载时自动写入，管理员可自行增删改） */
+const DEFAULT_MEMBERS: Array<{ name: string; team: TeamKey; subTeam: SubTeamKey }> = [
+  // 项目组 A 组
+  { name: "严志展", team: "PROJECT", subTeam: "A" },
+  { name: "詹小坊", team: "PROJECT", subTeam: "A" },
+  { name: "代友林", team: "PROJECT", subTeam: "A" },
+  { name: "左凯", team: "PROJECT", subTeam: "A" },
+  { name: "陈俊明", team: "PROJECT", subTeam: "A" },
+  { name: "林锦", team: "PROJECT", subTeam: "A" },
+  { name: "吴杰", team: "PROJECT", subTeam: "A" },
+  { name: "陈默涵", team: "PROJECT", subTeam: "A" },
+  { name: "焦佳豪", team: "PROJECT", subTeam: "A" },
+  { name: "温彩德", team: "PROJECT", subTeam: "A" },
+  // 项目组 B 组
+  { name: "杨郑明", team: "PROJECT", subTeam: "B" },
+  { name: "林颖喆", team: "PROJECT", subTeam: "B" },
+  { name: "谷浩天", team: "PROJECT", subTeam: "B" },
+  { name: "张耿标", team: "PROJECT", subTeam: "B" },
+  { name: "吴毅强", team: "PROJECT", subTeam: "B" },
+  { name: "蔡圣炜", team: "PROJECT", subTeam: "B" },
+  { name: "赵龙", team: "PROJECT", subTeam: "B" },
+  { name: "黄传武", team: "PROJECT", subTeam: "B" },
+  { name: "郑凯轩", team: "PROJECT", subTeam: "B" },
+  { name: "李志浩", team: "PROJECT", subTeam: "B" },
+  // 项目组 C 组
+  { name: "魏向中", team: "PROJECT", subTeam: "C" },
+  { name: "周飞明", team: "PROJECT", subTeam: "C" },
+  { name: "蒋家苓", team: "PROJECT", subTeam: "C" },
+  { name: "陈权", team: "PROJECT", subTeam: "C" },
+  { name: "王一帆", team: "PROJECT", subTeam: "C" },
+  { name: "林子涵", team: "PROJECT", subTeam: "C" },
+  { name: "郭柳江", team: "PROJECT", subTeam: "C" },
+  { name: "岳佳成", team: "PROJECT", subTeam: "C" },
+  { name: "阮腾伟", team: "PROJECT", subTeam: "C" },
+  // 质安组
+  { name: "杜思明", team: "QA", subTeam: "NONE" },
+  // 售后组
+  { name: "谢木江", team: "AFTERSALES", subTeam: "NONE" },
+  { name: "刘仲武", team: "AFTERSALES", subTeam: "NONE" },
+];
+
+function seedDefaultMembers(): Member[] {
+  return DEFAULT_MEMBERS.map((d, i) => ({
+    id: `mem_default_${i}`,
+    name: d.name,
+    team: d.team,
+    subTeam: d.subTeam,
+    active: true,
+  }));
+}
+
 export function listMembers(): Member[] {
+  const key = KEYS.members;
+  // 首次访问（localStorage 无该键）时写入默认名单
+  if (typeof window !== "undefined" && window.localStorage.getItem(key) === null) {
+    const seeded = seedDefaultMembers();
+    write(key, seeded);
+    return seeded;
+  }
   return read<Member[]>(KEYS.members, []);
 }
 
