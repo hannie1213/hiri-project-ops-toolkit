@@ -1,14 +1,14 @@
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import { parseDate } from "./utils";
-import type { TeamKey } from "./store";
+import { TEAM_MEMBERS, type TeamKey } from "./team-members";
 
 export const TARGET_SHEET = "所有项目进度计划情况";
 
 export const WEEKLY_GROUPS = {
-  项目交付: ["严志展", "詹小坊", "代友林", "左恺", "陈俊明", "林锦", "吴杰", "陈默涵", "焦佳豪", "温彩德", "杨郑明", "林颖喆", "谷浩天", "张耿标", "吴毅强", "蔡圣炜", "赵龙", "黄传武", "郑凯轩", "李志浩", "魏向中", "周飞明", "蒋家豪", "陈权", "王一帆", "林子涵", "郭柳江", "岳佳成", "阮腾伟"],
-  质量控制组: ["杜思明"],
-  售后服务组: ["谢木江", "刘仲武"],
+  项目交付: [...TEAM_MEMBERS.A, ...TEAM_MEMBERS.B, ...TEAM_MEMBERS.C],
+  质量控制组: [...TEAM_MEMBERS.QA],
+  售后服务组: [...TEAM_MEMBERS.AFTERSALES],
 } as const;
 
 export function recognizeWeeklyMember(fileName: string): string | null {

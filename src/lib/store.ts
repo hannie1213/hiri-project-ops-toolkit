@@ -3,13 +3,13 @@
 // 纯浏览器端数据层：IndexedDB 持久化，内存镜像保证现有页面可同步读取。
 
 import { evaluateProject, type ProjectStatusInfo } from "@/lib/status";
+import { TEAM_MEMBERS, TEAMS, inferProjectTeam, type TeamKey } from "@/lib/team-members";
 import { splitPm, uid, fmtDate, parseDate } from "@/lib/utils";
 
 /** 5 个平级组别（项目组分 A/B/C，与质安组/售后组并列） */
-export type TeamKey = "A" | "B" | "C" | "QA" | "AFTERSALES";
 export type SubTeamKey = "A" | "B" | "C" | "NONE";
-
-export const TEAMS: TeamKey[] = ["A", "B", "C", "QA", "AFTERSALES"];
+export { TEAM_MEMBERS, TEAMS, inferProjectTeam };
+export type { TeamKey };
 
 export const TEAM_LABEL: Record<TeamKey, string> = {
   A: "项目A组",
@@ -71,6 +71,8 @@ export interface Project {
   milestones: Milestone[];
   managers: string[];
   team: TeamKey | null;
+  /** 标记空分组已经人工确认或完成迁移，避免每次读取重复推断。 */
+  teamResolved?: boolean;
   deletedAt?: string | null;
   updatedAt?: string;
 }
@@ -216,9 +218,14 @@ export function listProjects(): Project[] {
   const raw = read<Project[]>(KEYS.projects, []);
   let migrated = false;
   const normalized = raw.map((p) => {
-    if (p.team === undefined) {
+    const managers = syncManagers(p.pmRaw);
+    if (p.team == null && p.teamResolved !== true) {
       migrated = true;
-      return { ...p, team: null };
+      return { ...p, managers, team: inferProjectTeam(managers), teamResolved: true };
+    }
+    if (p.managers?.join("\u0000") !== managers.join("\u0000")) {
+      migrated = true;
+      return { ...p, managers };
     }
     return p;
   });
@@ -264,6 +271,7 @@ function refreshStatus(p: Project): Project {
     ...p,
     managers: syncManagers(p.pmRaw),
     team: p.team ?? null,
+    teamResolved: p.teamResolved ?? true,
   };
 }
 
@@ -317,6 +325,7 @@ export function createProject(input: ProjectInput): Project {
     })),
     managers: [],
     team: input.team ?? null,
+    teamResolved: true,
     deletedAt: null,
     updatedAt: now,
   });
@@ -347,7 +356,8 @@ export function updateProject(id: string, input: ProjectInput): Project | undefi
     remark: input.remark ?? prev.remark,
     version: prev.version + 1,
     updatedBy: "管理员",
-    team: input.team ?? prev.team,
+    team: input.team !== undefined ? input.team : prev.team,
+    teamResolved: input.team !== undefined ? true : prev.teamResolved,
     milestones: (input.milestones ?? []).map((m, i) => ({
       id: uid("m_"),
       name: m.name,
@@ -428,7 +438,8 @@ export function importProjects(
           marketOwner: p.marketOwner ?? existing.marketOwner,
           currentStatus: p.currentStatus ?? existing.currentStatus,
           remark: p.remark ?? existing.remark,
-          team: p.team ?? existing.team,
+          team: p.team ?? existing.team ?? inferProjectTeam(syncManagers(p.pmRaw || existing.pmRaw)),
+          teamResolved: true,
           startDate: p.startDate ?? existing.startDate,
           endDate: p.endDate ?? existing.endDate,
           source: "IMPORTED",
@@ -478,7 +489,8 @@ export function importProjects(
               dateIssueReason: m.dateIssueReason ?? null,
             })),
             managers: [],
-            team: p.team ?? null,
+            team: p.team ?? inferProjectTeam(syncManagers(p.pmRaw)),
+            teamResolved: true,
             deletedAt: null,
             updatedAt: new Date().toISOString(),
           })
@@ -524,45 +536,9 @@ export function listImports(): ImportLog[] {
 /* ----------------------------- 成员名单 ----------------------------- */
 
 /** 默认周报成员名单（首次加载时自动写入，管理员可自行增删改） */
-const DEFAULT_MEMBERS: Array<{ name: string; team: TeamKey }> = [
-  // 项目组 A 组
-  { name: "严志展", team: "A" },
-  { name: "詹小坊", team: "A" },
-  { name: "代友林", team: "A" },
-  { name: "左恺", team: "A" },
-  { name: "陈俊明", team: "A" },
-  { name: "林锦", team: "A" },
-  { name: "吴杰", team: "A" },
-  { name: "陈默涵", team: "A" },
-  { name: "焦佳豪", team: "A" },
-  { name: "温彩德", team: "A" },
-  // 项目组 B 组
-  { name: "杨郑明", team: "B" },
-  { name: "林颖喆", team: "B" },
-  { name: "谷浩天", team: "B" },
-  { name: "张耿标", team: "B" },
-  { name: "吴毅强", team: "B" },
-  { name: "蔡圣炜", team: "B" },
-  { name: "赵龙", team: "B" },
-  { name: "黄传武", team: "B" },
-  { name: "郑凯轩", team: "B" },
-  { name: "李志浩", team: "B" },
-  // 项目组 C 组
-  { name: "魏向中", team: "C" },
-  { name: "周飞明", team: "C" },
-  { name: "蒋家豪", team: "C" },
-  { name: "陈权", team: "C" },
-  { name: "王一帆", team: "C" },
-  { name: "林子涵", team: "C" },
-  { name: "郭柳江", team: "C" },
-  { name: "岳佳成", team: "C" },
-  { name: "阮腾伟", team: "C" },
-  // 质安组
-  { name: "杜思明", team: "QA" },
-  // 售后组
-  { name: "谢木江", team: "AFTERSALES" },
-  { name: "刘仲武", team: "AFTERSALES" },
-];
+const DEFAULT_MEMBERS: Array<{ name: string; team: TeamKey }> = TEAMS.flatMap((team) =>
+  TEAM_MEMBERS[team].map((name) => ({ name, team }))
+);
 
 function seedDefaultMembers(): Member[] {
   return DEFAULT_MEMBERS.map((d, i) => ({
