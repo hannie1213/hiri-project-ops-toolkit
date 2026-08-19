@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardCheck, Copy, Download, RotateCcw, Save } from "lucide-react";
 import { Button, Card, CardHeader } from "@/components/ui";
-import { confirmationMilestones } from "@/lib/status";
+import { confirmationMilestones, projectPhaseLabel } from "@/lib/status";
 import { evaluate, getSettings, listProjects, saveSettings, subscribe } from "@/lib/store";
 
-const DEFAULT_TEMPLATE = "@{姓名}，你好：\n以下项目节点已超过计划日期，尚未填写实际日期，请协助确认当前进展并补充：\n{项目明细}\n核对日期：{确认日期}";
+const LEGACY_DEFAULT_TEMPLATE = "@{姓名}，你好：\n以下项目节点已超过计划日期，尚未填写实际日期，请协助确认当前进展并补充：\n{项目明细}\n核对日期：{确认日期}";
+const DEFAULT_TEMPLATE = "@{姓名}，请确认以下项目当前状态，并更新对应节点的实际日期：\n\n{项目明细}";
 type Contact = { name: string; details: string[] };
 
 function render(template: string, contact: Contact): string {
@@ -15,18 +16,28 @@ function render(template: string, contact: Contact): string {
 
 export default function ConfirmPage() {
   const [projects, setProjects] = useState(() => listProjects());
-  const [template, setTemplate] = useState(() => getSettings().confirmationTemplate ?? DEFAULT_TEMPLATE);
+  const [template, setTemplate] = useState(() => {
+    const saved = getSettings().confirmationTemplate;
+    return !saved || saved === LEGACY_DEFAULT_TEMPLATE ? DEFAULT_TEMPLATE : saved;
+  });
   const [message, setMessage] = useState("");
   const refresh = useCallback(() => setProjects(listProjects()), []);
   useEffect(() => subscribe("__all__", refresh), [refresh]);
   const contacts = useMemo(() => {
-    const grouped = new Map<string, string[]>();
+    const grouped = new Map<string, Array<{ projectName: string; nodes: string; currentStatus: string }>>();
     for (const project of projects) {
       const info = evaluate(project).statusInfo; const nodes = confirmationMilestones(info); if (!nodes.length) continue;
-      const detail = `- ${project.name}：${nodes.map((node) => `${node.name}（计划 ${formatDate(node.plannedDate)}）`).join("、")}`;
+      const detail = {
+        projectName: project.name,
+        nodes: nodes.map((node) => `${node.name}（计划 ${formatCopyDate(node.plannedDate)}）`).join("、"),
+        currentStatus: projectPhaseLabel(info),
+      };
       for (const manager of project.managers) grouped.set(manager, [...(grouped.get(manager) ?? []), detail]);
     }
-    return [...grouped].map(([name, details]) => ({ name, details }));
+    return [...grouped].map(([name, items]) => ({
+      name,
+      details: items.map((item, index) => `${index + 1}. ${item.projectName}\n   到期节点：${item.nodes}\n   当前状态：${item.currentStatus}`),
+    }));
   }, [projects]);
   async function copy(text: string, name?: string) { if (!text.trim()) return setMessage("当前没有可复制的提醒文案"); await navigator.clipboard.writeText(text); setMessage(name ? `已复制 ${name} 的提醒文案` : "已复制全部提醒文案"); }
   function exportContacts() {
@@ -41,4 +52,4 @@ export default function ConfirmPage() {
     <Card><CardHeader title={`待发送提醒（${contacts.length} 人）`} desc="每位项目经理一段独立文案，可直接复制发送"/><div className="divide-y">{contacts.map((contact) => <div key={contact.name} className="p-5"><div className="mb-3 flex items-center justify-between gap-3"><div className="font-semibold text-slate-800">{contact.name} · {contact.details.length} 个待确认项目</div><Button variant="secondary" size="sm" onClick={() => copy(render(template, contact), contact.name)}><Copy className="h-4 w-4"/>复制该人员文案</Button></div><pre className="whitespace-pre-wrap rounded-xl border border-[#e0e9e4] bg-[#f5f9f7] p-4 text-sm leading-6 text-slate-700">{render(template, contact)}</pre></div>)}{!contacts.length && <div className="p-8 text-center text-sm text-slate-400">当前没有需要发送的项目确认提醒</div>}</div></Card>
   </div>;
 }
-function formatDate(date: Date | null) { return date ? `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}` : "—"; }
+function formatCopyDate(date: Date | null) { return date ? `${date.getFullYear()}.${date.getMonth()+1}.${date.getDate()}` : "—"; }
