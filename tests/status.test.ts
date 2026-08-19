@@ -12,6 +12,11 @@ describe("项目状态验收规则", () => {
     expect(info.status).toBe("PENDING_ACTUAL"); expect(info.hasLateRisk).toBe(false);
     expect(info.warning).toContain("不代表延期");
   });
+  it("未来计划节点保持正常，不提前标记为待补实际日期", () => {
+    const info = evaluateProject([ms("验收", d(20), null)], TODAY);
+    expect(info.status).toBe("ON_TRACK");
+    expect(info.hasPendingActual).toBe(false);
+  });
   it("前置节点实际晚于计划显示风险，验收未完成时不显示延期完成", () => {
     const info = evaluateProject([ms("进场", d(-5), d(-2)), ms("验收", d(20), null, 1)], TODAY);
     expect(info.status).toBe("LATE_RISK"); expect(info.acceptanceResult).toBe("尚未验收");

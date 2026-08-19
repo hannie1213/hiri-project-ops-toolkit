@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowRight, Plus, Search } from "lucide-react";
 import { Input, Select } from "@/components/ui";
 import { evaluate, listProjects, subscribe, TEAM_LABEL, TEAMS, type Project, type TeamKey } from "@/lib/store";
-import { confirmationMilestones, upcomingMilestones, type MilestoneView, type ProjectStatus } from "@/lib/status";
+import { confirmationMilestones, projectPhaseLabel, upcomingMilestones, type MilestoneView, type ProjectStatus } from "@/lib/status";
 import { fmtDate } from "@/lib/utils";
 
 type StatusFilter = "ALL" | "FOLLOW_UP" | "ACCEPTED_GROUP" | "NORMAL" | ProjectStatus;
@@ -15,6 +15,7 @@ type ProjectRow = {
   project: Project;
   status: ProjectStatus;
   statusLabel: string;
+  phaseLabel: string;
   managers: string[];
   priority: number;
   needsFollowUp: boolean;
@@ -81,6 +82,7 @@ function buildRows(): ProjectRow[] {
       project,
       status: info.status,
       statusLabel: info.label,
+      phaseLabel: projectPhaseLabel(info),
       managers: project.managers,
       priority,
       needsFollowUp: !info.accepted && (info.hasDateIssue || info.hasLateRisk || confirmations.length > 0 || upcoming.length > 0),
@@ -144,7 +146,7 @@ function ProjectsPageInner() {
         <div className="grid items-start gap-5 min-[1700px]:grid-cols-[minmax(0,1fr)_360px]">
           <section className="overflow-hidden rounded-2xl border border-[#dbe6e0] bg-white shadow-[0_12px_35px_rgba(31,72,56,0.06)]">
             <div className="monitor-grid hidden border-b border-[#d9e5df] bg-[#f2f7f4] px-4 py-4 text-sm font-bold text-[#526b61] lg:grid">
-              <span>优先级</span><span>项目</span><span>项目经理</span><span>当前状态</span><span>提醒节点</span><span>计划日期</span><span>时间</span><span/>
+              <span>优先级</span><span>项目</span><span>项目经理</span><span>当前阶段</span><span>提醒节点</span><span>计划日期</span><span>时间状态</span><span/>
             </div>
             <div className="max-h-[calc(100vh-14rem)] min-h-[470px] overflow-y-auto">
               {filtered.map((row) => <MonitorRow key={row.project.id} row={row}/>)}
@@ -170,8 +172,8 @@ function MonitorRow({ row }: { row: ProjectRow }) {
     <article className={`monitor-grid group relative border-b border-[#dbe6e0] px-4 py-5 transition last:border-b-0 lg:grid ${visual.row}`}>
       <div className="flex items-center gap-2 lg:block"><span className={`inline-block h-2.5 w-2.5 rounded-full ring-4 ${visual.dot}`}/><span className={`ml-2 inline-flex rounded-full px-2.5 py-1 text-xs font-bold lg:mt-3 ${visual.badge}`}>{visual.priorityLabel}</span></div>
       <div className="min-w-0"><Link href={`/projects/detail?id=${row.project.id}`} className="line-clamp-2 text-base font-black leading-6 text-[#09271d] hover:text-[#147154] hover:underline">{row.project.name}</Link><div className="mt-2 truncate text-sm text-[#7b8e86]">{row.project.code || "无项目编号"}{row.project.category ? ` · ${row.project.category}` : ""}</div></div>
-      <div className="min-w-0"><div className="flex flex-wrap gap-x-2 font-bold">{row.managers.length ? row.managers.map((name) => <span key={name}>{name}</span>) : <span className="text-[#82958e]">未指定</span>}</div><div className="mt-2 truncate text-sm text-[#82958e]">市场：{row.project.marketOwner || "待补"}</div></div>
-      <div><div className="font-medium">{row.project.currentStatus || "状态待补"}</div><div className="mt-2 text-sm text-[#82958e]">{row.project.team ? TEAM_LABEL[row.project.team] : "未分组"}</div></div>
+      <div className="min-w-0"><div className="flex flex-wrap gap-x-2 font-bold">{row.managers.length ? row.managers.map((name) => <span key={name}>{name}</span>) : <span className="text-[#82958e]">未指定</span>}</div></div>
+      <div><div className="font-medium">{row.phaseLabel}</div><div className="mt-2 text-sm text-[#82958e]">{row.project.team ? TEAM_LABEL[row.project.team] : "未分组"}</div></div>
       <div className="min-w-0"><div className="font-bold">{row.reminderNode}</div><div className="mt-2 line-clamp-2 text-sm leading-5 text-[#2874a6]">{row.reminderDetail}</div></div>
       <div className="font-medium tabular-nums">{formatPlanDate(row.plannedDate)}</div>
       <div className={`font-bold ${visual.time}`}>{row.statusLabel}</div>

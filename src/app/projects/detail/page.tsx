@@ -8,6 +8,7 @@ import { Button, Card, CardHeader } from "@/components/ui";
 import { StatusBadge } from "@/components/ui/badge";
 import ProjectForm, { type ProjectFormValue } from "@/components/project-form";
 import { getProject, evaluate, updateProject, deleteProject, subscribe, TEAM_LABEL, type TeamKey } from "@/lib/store";
+import { projectPhaseLabel } from "@/lib/status";
 import { fmtDate } from "@/lib/utils";
 
 type DetailView = {
@@ -19,8 +20,6 @@ type DetailView = {
   contractSignedDate: string | null;
   contractAmount: string | null;
   upstreamUnit: string | null;
-  marketOwner: string | null;
-  currentStatus: string | null;
   pmRaw: string | null;
   pmList: string[];
   team: TeamKey | null;
@@ -34,6 +33,7 @@ type DetailView = {
   evaluate: {
     status: string;
     label: string;
+    phaseLabel: string;
     warning: string | null;
     milestoneStatus: Array<{
       name: string;
@@ -63,8 +63,6 @@ function toView(id: string): DetailView | null {
     contractSignedDate: p.contractSignedDate ?? null,
     contractAmount: p.contractAmount ?? null,
     upstreamUnit: p.upstreamUnit ?? null,
-    marketOwner: p.marketOwner ?? null,
-    currentStatus: p.currentStatus ?? null,
     pmRaw: p.pmRaw,
     pmList: p.managers,
     team: p.team,
@@ -84,6 +82,7 @@ function toView(id: string): DetailView | null {
     evaluate: {
       status: ev.statusInfo.status,
       label: ev.statusInfo.label,
+      phaseLabel: projectPhaseLabel(ev.statusInfo),
       warning: ev.statusInfo.warning,
       milestoneStatus: ev.statusInfo.milestoneStatus,
     },
@@ -130,8 +129,6 @@ function ProjectDetailInner() {
         contractSignedDate: v.contractSignedDate || null,
         contractAmount: v.contractAmount,
         upstreamUnit: v.upstreamUnit,
-        marketOwner: v.marketOwner,
-        currentStatus: v.currentStatus,
         pmRaw: v.pmRaw,
         team: v.team,
         startDate: v.startDate || null,
@@ -205,8 +202,6 @@ function ProjectDetailInner() {
               contractSignedDate: data.contractSignedDate?.slice(0, 10) ?? "",
               contractAmount: data.contractAmount ?? "",
               upstreamUnit: data.upstreamUnit ?? "",
-              marketOwner: data.marketOwner ?? "",
-              currentStatus: data.currentStatus ?? "",
               pmRaw: data.pmRaw ?? "",
               team: data.team,
               startDate: data.startDate ? data.startDate.slice(0, 10) : "",
@@ -388,8 +383,7 @@ function ProjectDetailInner() {
               <div><dt className="text-xs text-slate-400">合同签订日期</dt><dd className="text-slate-700">{data.contractSignedDate ? fmt(data.contractSignedDate) : "—"}</dd></div>
               <div><dt className="text-xs text-slate-400">合同金额</dt><dd className="text-slate-700">{data.contractAmount || "—"}</dd></div>
               <div><dt className="text-xs text-slate-400">上家单位</dt><dd className="text-slate-700">{data.upstreamUnit || "—"}</dd></div>
-              <div><dt className="text-xs text-slate-400">市场负责人</dt><dd className="text-slate-700">{data.marketOwner || "—"}</dd></div>
-              <div><dt className="text-xs text-slate-400">当前项目状态</dt><dd className="text-slate-700">{data.currentStatus || "—"}</dd></div>
+              <div><dt className="text-xs text-slate-400">当前项目阶段</dt><dd className="text-slate-700">{data.evaluate.phaseLabel}</dd></div>
               <div><dt className="text-xs text-slate-400">项目组</dt><dd className="text-slate-700">{data.team ? TEAM_LABEL[data.team] : "—"}</dd></div>
               <div><dt className="text-xs text-slate-400">完整项目经理</dt><dd className="text-slate-700">{data.pmRaw || "—"}</dd></div>
               <div>

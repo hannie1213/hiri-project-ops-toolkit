@@ -7,7 +7,7 @@ import { ChevronRight, FilePlus2, Search } from "lucide-react";
 import { Button, Card, Input, Select } from "@/components/ui";
 import { StatusBadge } from "@/components/ui/badge";
 import { evaluate, getSettings, listProjects, saveSettings, subscribe, TEAM_LABEL, TEAMS, type TeamKey } from "@/lib/store";
-import { confirmationMilestones, upcomingMilestones } from "@/lib/status";
+import { confirmationMilestones, projectPhaseLabel, upcomingMilestones } from "@/lib/status";
 import { fmtDate } from "@/lib/utils";
 
 type Row = ReturnType<typeof makeRows>[number];
@@ -24,8 +24,8 @@ function makeRows(windowDays: number) {
     const days = reminder?.remainingDays ?? null;
     const priority = info.hasDateIssue ? 1 : info.hasLateRisk ? 2 : confirm.length ? 3 : upcoming.length ? 4 : 5;
     return {
-      id: project.id, code: project.code || "—", name: project.name, pm: project.pmRaw || "—", managers: project.managers, marketOwner: project.marketOwner || "",
-      team: project.team, currentStatus: project.currentStatus || info.label, computedStatus: info.status,
+      id: project.id, code: project.code || "—", name: project.name, pm: project.pmRaw || "—", managers: project.managers,
+      team: project.team, phaseLabel: projectPhaseLabel(info), computedStatus: info.status,
       priority, reminderNode: reminder?.name || "—", plannedDate: reminder?.plannedDate ? fmtDate(reminder.plannedDate) : "—",
       timeStatus: info.accepted ? info.acceptanceResult : reminder?.hasDateIssue ? "日期待核对" : reminder?.completedLate ? "有延期风险" : days === 0 ? "今天到期" : days != null && days > 0 ? `剩余 ${days} 天` : reminder?.isPlannedPassed ? "待补实际日期" : "正常",
       riskNodes: riskNodes.map((m) => m.name).join("、"), pendingNodes: confirm.map((m) => m.name).join("、"), upcomingNodes: upcoming.map((m) => m.name).join("、"),
@@ -47,8 +47,8 @@ export default function DashboardPage() {
   const stats = { follow: rows.filter((r) => r.follow).length, risk: rows.filter((r) => r.computedStatus === "LATE_RISK").length, near: rows.filter((r) => r.near).length, issue: rows.filter((r) => r.computedStatus === "DATE_ISSUE").length };
   function setWindow(value: string) { const next = Number(value) as 7|14|30|60; setWindowDays(next); saveSettings({ reminderWindow: next }); }
   async function exportRows(kind: "xlsx"|"csv") {
-    const header = ["优先级","项目编号","项目名称","项目经理","市场负责人","当前状态","延期风险节点","待补实际日期节点","临期节点","下一节点","计划日期","剩余天数"];
-    const data = filtered.map((r) => [r.priority,r.code,r.name,r.pm,r.marketOwner,r.currentStatus,r.riskNodes,r.pendingNodes,r.upcomingNodes,r.nextNode,r.plannedDate,r.remainingDays ?? ""]);
+    const header = ["优先级","项目编号","项目名称","项目经理","当前状态","延期风险节点","待补实际日期节点","临期节点","下一节点","计划日期","剩余天数"];
+    const data = filtered.map((r) => [r.priority,r.code,r.name,r.pm,r.phaseLabel,r.riskNodes,r.pendingNodes,r.upcomingNodes,r.nextNode,r.plannedDate,r.remainingDays ?? ""]);
     if (kind === "csv") { const csv = "\ufeff" + [header,...data].map((line) => line.map((v) => `"${String(v).replaceAll('"','""')}"`).join(",")).join("\r\n"); download(new Blob([csv],{type:"text/csv;charset=utf-8"}),"项目提醒清单.csv"); return; }
     const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet("提醒清单"); ws.addRow(header); data.forEach((r) => ws.addRow(r)); ws.getRow(1).font = {bold:true}; ws.columns.forEach((c) => c.width = 18); download(new Blob([new Uint8Array(await wb.xlsx.writeBuffer()) as BlobPart]),"项目提醒清单.xlsx");
   }

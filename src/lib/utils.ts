@@ -45,6 +45,13 @@ export function parseDate(input: string | Date | null | undefined): Date | null 
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** Excel 日期列中常见的空值或阶段说明，不应被判定为日期格式错误。 */
+export function isBlankDateMarker(input: string | null | undefined): boolean {
+  const value = String(input ?? "").trim().replace(/\s+/g, "");
+  if (!value) return true;
+  return /^(?:[-—/]|无|暂无|待定|未定|待补|待填写|未填写|未计划|未排期|未完成|未验收|进行中|在建|计划中|施工中|调试中|试运行中|待验收|不涉及|无需)$/.test(value);
+}
+
 /** 将 Date 格式化为 M.D（如 8.10） */
 export function fmtShortDate(d: Date | string | null | undefined): string {
   if (!d) return "";

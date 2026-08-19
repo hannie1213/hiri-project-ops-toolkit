@@ -56,7 +56,7 @@ export function evaluateProject(
   const lateNodes = views.filter((m) => !m.isAcceptance && m.completedLate);
   if (lateNodes.length) return makeResult("LATE_RISK", "有延期风险", views, false, "尚未验收", false, true, views.some((m) => m.actualMissing), `前置节点${lateNodes.map((m) => `「${m.name}」`).join("、")}实际完成晚于计划；最终延期仍以验收为准`);
   // 计划已过但实际为空只表示待补，不判断为延期。
-  const pending = views.find((m) => m.actualMissing && m.plannedDate);
+  const pending = views.find((m) => m.actualMissing && m.plannedDate && m.isPlannedPassed);
   if (pending) return makeResult("PENDING_ACTUAL", "待补实际日期", views, false, "尚未验收", false, false, true, pending.isPlannedPassed ? `节点「${pending.name}」计划日期已过，待补实际日期（不代表延期）` : `节点「${pending.name}」实际日期待补`);
   if (!views.length || views.every((m) => !m.plannedDate && !m.actualDate)) return makeResult("NOT_STARTED", "正常", views, false, "尚未验收", false, false, false, null);
   return makeResult("ON_TRACK", "正常", views, false, "尚未验收", false, false, false, null);
@@ -82,6 +82,22 @@ export function upcomingMilestones(projectStatus: ProjectStatusInfo, today: Date
 export function confirmationMilestones(info: ProjectStatusInfo): MilestoneView[] {
   if (info.accepted) return [];
   return info.milestoneStatus.filter((m) => m.actualMissing && !!m.plannedDate && m.isPlannedPassed);
+}
+
+/** 根据节点完成情况推导项目所处阶段，避免依赖人工填写的自由文本状态。 */
+export function projectPhaseLabel(info: ProjectStatusInfo): string {
+  if (info.accepted) return "已验收";
+  const milestones = info.milestoneStatus.slice().sort((a, b) => a.order - b.order);
+  if (!milestones.length || milestones.every((item) => !item.plannedDate && !item.actualDate)) return "未排期";
+  const next = milestones.find((item) => item.actualMissing);
+  if (!next) return "节点已完成";
+  if (next.isAcceptance) return "待验收";
+  if (next.name.includes("到货")) return "待到货";
+  if (next.name.includes("进场")) return "待进场";
+  if (next.name.includes("施工") || next.name.includes("完工")) return "施工中";
+  if (next.name.includes("调试")) return "调试中";
+  if (next.name.includes("试运行")) return "试运行中";
+  return `${next.name}中`;
 }
 
 function startOfDay(date: Date): Date { return new Date(date.getFullYear(), date.getMonth(), date.getDate()); }

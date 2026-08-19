@@ -20,8 +20,6 @@ export type ProjectFormValue = {
   contractSignedDate: string;
   contractAmount: string;
   upstreamUnit: string;
-  marketOwner: string;
-  currentStatus: string;
   pmRaw: string;
   team: TeamKey | null;
   startDate: string;
@@ -122,8 +120,6 @@ export default function ProjectForm({
           <Field label="合同签订日期"><Input type="date" value={form.contractSignedDate} onChange={(v) => set("contractSignedDate", v)} /></Field>
           <Field label="合同金额"><Input value={form.contractAmount} onChange={(v) => set("contractAmount", v)} placeholder="可保留单位或文本格式" /></Field>
           <Field label="上家单位"><Input value={form.upstreamUnit} onChange={(v) => set("upstreamUnit", v)} /></Field>
-          <Field label="市场负责人"><Input value={form.marketOwner} onChange={(v) => set("marketOwner", v)} /></Field>
-          <Field label="当前项目状态"><Input value={form.currentStatus} onChange={(v) => set("currentStatus", v)} placeholder="如：实施中、暂停、已验收" /></Field>
           <Field label="所属项目组" desc="用于项目管理按组筛选">
             <Select
               value={form.team ?? "NONE"}

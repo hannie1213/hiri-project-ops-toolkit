@@ -4,7 +4,7 @@
 
 import { evaluateProject, type ProjectStatusInfo } from "@/lib/status";
 import { TEAM_MEMBERS, TEAMS, inferProjectTeam, resolveLegacyProjectTeam, type TeamKey } from "@/lib/team-members";
-import { splitPm, uid, fmtDate, parseDate } from "@/lib/utils";
+import { splitPm, uid, fmtDate, isBlankDateMarker, parseDate } from "@/lib/utils";
 
 /** 5 个平级组别（项目组分 A/B/C，与质安组/售后组并列） */
 export type SubTeamKey = "A" | "B" | "C" | "NONE";
@@ -59,8 +59,6 @@ export interface Project {
   contractSignedDate?: string | null;
   contractAmount?: string | null;
   upstreamUnit?: string | null;
-  marketOwner?: string | null;
-  currentStatus?: string | null;
   pmRaw: string | null;
   startDate: string | null;
   endDate: string | null;
@@ -218,20 +216,25 @@ export function listProjects(): Project[] {
   const raw = read<Project[]>(KEYS.projects, []);
   let migrated = false;
   const normalized = raw.map((p) => {
-    const managers = syncManagers(p.pmRaw);
-    const legacy = p as Omit<Project, "team"> & { team: TeamKey | "PROJECT" | null | undefined; subTeam?: SubTeamKey };
+    const stored = p as Project & { marketOwner?: unknown; currentStatus?: unknown };
+    const hadRemovedFields = "marketOwner" in stored || "currentStatus" in stored;
+    const { marketOwner: _marketOwner, currentStatus: _currentStatus, ...cleanProject } = stored;
+    const base = cleanProject as Project;
+    if (hadRemovedFields) migrated = true;
+    const managers = syncManagers(base.pmRaw);
+    const legacy = base as Omit<Project, "team"> & { team: TeamKey | "PROJECT" | null | undefined; subTeam?: SubTeamKey };
     const hasValidTeam = TEAMS.includes(legacy.team as TeamKey);
-    const needsTeamMigration = !hasValidTeam && !(legacy.team == null && p.teamResolved === true);
+    const needsTeamMigration = !hasValidTeam && !(legacy.team == null && base.teamResolved === true);
     if (needsTeamMigration) {
       migrated = true;
       const { subTeam: _legacySubTeam, ...project } = legacy;
       return { ...project, managers, team: resolveLegacyProjectTeam(legacy.team, legacy.subTeam, managers), teamResolved: true } as Project;
     }
-    if (p.managers?.join("\u0000") !== managers.join("\u0000")) {
+    if (base.managers?.join("\u0000") !== managers.join("\u0000")) {
       migrated = true;
-      return { ...p, managers };
+      return { ...base, managers };
     }
-    return p;
+    return base;
   });
   if (migrated) write(KEYS.projects, normalized);
   return normalized.filter((p) => !p.deletedAt).sort((a, b) => a.name.localeCompare(b.name));
@@ -253,10 +256,16 @@ export function evaluate(p: Project): Project & { statusInfo: ProjectStatusInfo 
       order: m.order,
       plannedDate: parseDate(m.plannedDate),
       actualDate: parseDate(m.actualDate),
-      dateIssueReason: m.dateIssueReason,
+      dateIssueReason: cleanDateIssueReason(m.dateIssueReason),
     }))
   );
   return { ...p, statusInfo: info };
+}
+
+function cleanDateIssueReason(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  const values = [...reason.matchAll(/「([^」]*)」/g)].map((match) => match[1]);
+  return values.length && values.every(isBlankDateMarker) ? null : reason;
 }
 
 function persistProjects(projects: Project[]) {
@@ -287,8 +296,6 @@ export interface ProjectInput {
   contractSignedDate?: string | null;
   contractAmount?: string | null;
   upstreamUnit?: string | null;
-  marketOwner?: string | null;
-  currentStatus?: string | null;
   pmRaw?: string | null;
   startDate?: string | null;
   endDate?: string | null;
@@ -309,8 +316,6 @@ export function createProject(input: ProjectInput): Project {
     contractSignedDate: input.contractSignedDate ?? null,
     contractAmount: input.contractAmount ?? null,
     upstreamUnit: input.upstreamUnit ?? null,
-    marketOwner: input.marketOwner ?? null,
-    currentStatus: input.currentStatus ?? null,
     pmRaw: input.pmRaw ?? null,
     startDate: input.startDate ?? null,
     endDate: input.endDate ?? null,
@@ -352,8 +357,6 @@ export function updateProject(id: string, input: ProjectInput): Project | undefi
     contractSignedDate: input.contractSignedDate ?? prev.contractSignedDate,
     contractAmount: input.contractAmount ?? prev.contractAmount,
     upstreamUnit: input.upstreamUnit ?? prev.upstreamUnit,
-    marketOwner: input.marketOwner ?? prev.marketOwner,
-    currentStatus: input.currentStatus ?? prev.currentStatus,
     pmRaw: input.pmRaw ?? prev.pmRaw,
     startDate: input.startDate ?? prev.startDate,
     endDate: input.endDate ?? prev.endDate,
@@ -404,8 +407,8 @@ export interface ImportedProject {
   startDate: string | null;
   endDate: string | null;
   category?: string | null; contractType?: string | null; contractSignedDate?: string | null;
-  contractAmount?: string | null; upstreamUnit?: string | null; marketOwner?: string | null;
-  currentStatus?: string | null; remark?: string | null; team?: TeamKey | null;
+  contractAmount?: string | null; upstreamUnit?: string | null;
+  remark?: string | null; team?: TeamKey | null;
   milestones: { name: string; plannedDate: string | null; actualDate: string | null; dateIssueReason?: string | null }[];
 }
 
@@ -439,8 +442,6 @@ export function importProjects(
           contractSignedDate: p.contractSignedDate ?? existing.contractSignedDate,
           contractAmount: p.contractAmount ?? existing.contractAmount,
           upstreamUnit: p.upstreamUnit ?? existing.upstreamUnit,
-          marketOwner: p.marketOwner ?? existing.marketOwner,
-          currentStatus: p.currentStatus ?? existing.currentStatus,
           remark: p.remark ?? existing.remark,
           team: p.team ?? existing.team ?? inferProjectTeam(syncManagers(p.pmRaw || existing.pmRaw)),
           teamResolved: true,
@@ -474,8 +475,6 @@ export function importProjects(
             contractSignedDate: p.contractSignedDate ?? null,
             contractAmount: p.contractAmount ?? null,
             upstreamUnit: p.upstreamUnit ?? null,
-            marketOwner: p.marketOwner ?? null,
-            currentStatus: p.currentStatus ?? null,
             pmRaw: p.pmRaw,
             startDate: p.startDate,
             endDate: p.endDate,
@@ -723,12 +722,12 @@ export function restoreSampleData(): void {
   const today = new Date();
   const date = (offset: number) => fmtDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset));
   const samples: ProjectInput[] = [
-    { code: "DEMO-001", name: "示例园区数字化项目", pmRaw: "示例经理甲、示例经理乙", category: "虚构示例", team: "A", currentStatus: "实施中", marketOwner: "示例市场人员", milestones: [
+    { code: "DEMO-001", name: "示例园区数字化项目", pmRaw: "示例经理甲、示例经理乙", category: "虚构示例", team: "A", milestones: [
       { name: "到货", plannedDate: date(-10), actualDate: date(-8) }, { name: "进场", plannedDate: date(-3), actualDate: null },
       { name: "完工（施工）", plannedDate: date(12), actualDate: null }, { name: "调试", plannedDate: date(20), actualDate: null },
       { name: "试运行", plannedDate: date(30), actualDate: null }, { name: "验收", plannedDate: date(45), actualDate: null },
     ] },
-    { code: "DEMO-002", name: "示例设备升级项目", pmRaw: "示例经理丙", category: "虚构示例", team: "B", currentStatus: "已验收", milestones: [
+    { code: "DEMO-002", name: "示例设备升级项目", pmRaw: "示例经理丙", category: "虚构示例", team: "B", milestones: [
       { name: "到货", plannedDate: date(-40), actualDate: date(-40) }, { name: "进场", plannedDate: date(-35), actualDate: date(-34) },
       { name: "完工（施工）", plannedDate: date(-20), actualDate: date(-18) }, { name: "调试", plannedDate: date(-15), actualDate: date(-14) },
       { name: "试运行", plannedDate: date(-10), actualDate: date(-10) }, { name: "验收", plannedDate: date(-5), actualDate: date(-4) },

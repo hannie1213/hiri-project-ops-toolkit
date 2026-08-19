@@ -75,8 +75,6 @@ export default function ImportPage() {
             contractSignedDate: p.contractSignedDate ? fmtDate(p.contractSignedDate) : null,
             contractAmount: p.contractAmount ?? null,
             upstreamUnit: p.upstreamUnit ?? null,
-            marketOwner: p.marketOwner ?? null,
-            currentStatus: p.currentStatus ?? null,
             remark: p.remark ?? null,
             team: p.team ?? null,
             milestones: p.milestones.map((m) => ({

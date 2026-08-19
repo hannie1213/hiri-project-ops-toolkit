@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
-import { parseDate } from "./utils";
+import { isBlankDateMarker, parseDate } from "./utils";
 import { TEAM_MEMBERS, type TeamKey } from "./team-members";
 
 export const TARGET_SHEET = "所有项目进度计划情况";
@@ -73,8 +73,6 @@ export type ImportedProject = {
   contractSignedDate?: Date | null;
   contractAmount?: string | null;
   upstreamUnit?: string | null;
-  marketOwner?: string | null;
-  currentStatus?: string | null;
   team?: TeamKey | null;
   milestones: ImportedMilestone[];
   row: number;
@@ -95,8 +93,8 @@ const START_KEYS = ["计划开始", "开始日期", "开始时间", "计划启�
 const END_KEYS = ["计划完成", "计划结束", "完成日期", "计划结束日期", "计划交付"];
 const BASIC_FIELDS = {
   category: ["项目类别"], contractType: ["合同类型"], contractSignedDate: ["合同签订日期"],
-  contractAmount: ["合同金额"], upstreamUnit: ["上家单位"], marketOwner: ["市场负责人"],
-  currentStatus: ["当前项目状态", "项目状态"], remark: ["备注"], team: ["项目组"],
+  contractAmount: ["合同金额"], upstreamUnit: ["上家单位"],
+  remark: ["备注"], team: ["项目组"],
 } as const;
 
 function parseTeam(value: string): TeamKey | null {
@@ -351,7 +349,7 @@ export async function parseProgressSheet(buffer: Uint8Array, fileName = "file.xl
     endCol = -1;
   const basicCols: Record<keyof typeof BASIC_FIELDS, number> = {
     category: -1, contractType: -1, contractSignedDate: -1, contractAmount: -1,
-    upstreamUnit: -1, marketOwner: -1, currentStatus: -1, remark: -1, team: -1,
+    upstreamUnit: -1, remark: -1, team: -1,
   };
   header.forEach((h, idx) => {
     const key = headerKey(h);
@@ -364,11 +362,11 @@ export async function parseProgressSheet(buffer: Uint8Array, fileName = "file.xl
       if (basicCols[field] < 0 && BASIC_FIELDS[field].some((candidate) => key === headerKey(candidate))) basicCols[field] = idx;
     });
   });
-  // 负责人列两遍扫描：优先"项目负责人/项目经理/pm"等强匹配，避免误取"市场负责人"
+  // 负责人列两遍扫描：优先项目负责人、项目经理、PM 等强匹配。
   for (let pass = 0; pass < 2 && pmCol < 0; pass++) {
     header.forEach((h, idx) => {
       const key = headerKey(h);
-      if (!key || pmCol >= 0) return;
+      if (!key || pmCol >= 0 || key.includes("市场")) return;
       if (pass === 0 && PM_KEYS.some((k) => key === headerKey(k))) pmCol = idx;
       if (pass === 1 && PM_KEYS.some((k) => key.startsWith(headerKey(k)) || key.endsWith(headerKey(k)))) pmCol = idx;
     });
@@ -478,8 +476,6 @@ export async function parseProgressSheet(buffer: Uint8Array, fileName = "file.xl
       contractSignedDate: basicCols.contractSignedDate >= 0 ? cellToDate(cells[basicCols.contractSignedDate]) : null,
       contractAmount: basicCols.contractAmount >= 0 ? cellToText(cells[basicCols.contractAmount]) || null : null,
       upstreamUnit: basicCols.upstreamUnit >= 0 ? cellToText(cells[basicCols.upstreamUnit]) || null : null,
-      marketOwner: basicCols.marketOwner >= 0 ? cellToText(cells[basicCols.marketOwner]) || null : null,
-      currentStatus: basicCols.currentStatus >= 0 ? cellToText(cells[basicCols.currentStatus]) || null : null,
       remark: basicCols.remark >= 0 ? cellToText(cells[basicCols.remark]) || null : null,
       team: parseTeam(basicCols.team >= 0 ? cellToText(cells[basicCols.team]) : ""),
       milestones: [],
@@ -492,7 +488,7 @@ export async function parseProgressSheet(buffer: Uint8Array, fileName = "file.xl
       const actual = mc.actualCol >= 0 ? cellToDate(cells[mc.actualCol]) : null;
       const plannedRaw = mc.planCol >= 0 ? cellToText(cells[mc.planCol]) : "";
       const actualRaw = mc.actualCol >= 0 ? cellToText(cells[mc.actualCol]) : "";
-      const dateIssueReason = [plannedRaw && !planned ? `计划日期「${plannedRaw}」无法识别` : "", actualRaw && !actual ? `实际日期「${actualRaw}」无法识别` : ""].filter(Boolean).join("；") || null;
+      const dateIssueReason = [plannedRaw && !planned && !isBlankDateMarker(plannedRaw) ? `计划日期「${plannedRaw}」无法识别` : "", actualRaw && !actual && !isBlankDateMarker(actualRaw) ? `实际日期「${actualRaw}」无法识别` : ""].filter(Boolean).join("；") || null;
       if (["到货", "进场", "完工（施工）", "完工", "施工完工", "调试", "试运行", "验收"].some((n) => mc.name.includes(n)) || planned || actual || dateIssueReason) {
         project.milestones.push({
           name: mc.name,
