@@ -3,8 +3,9 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Plus, Search } from "lucide-react";
-import { Input, Select } from "@/components/ui";
+import ExcelJS from "exceljs";
+import { ArrowRight, Download, Plus, Search } from "lucide-react";
+import { Button, Input, Select } from "@/components/ui";
 import { evaluate, listProjects, subscribe, TEAM_LABEL, TEAMS, type Project, type TeamKey } from "@/lib/store";
 import { confirmationMilestones, projectPhaseLabel, upcomingMilestones, type MilestoneView, type ProjectStatus } from "@/lib/status";
 import { fmtDate } from "@/lib/utils";
@@ -127,6 +128,62 @@ function ProjectsPageInner() {
   const monthStats = useMemo(() => buildMonthStats(rows), [rows]);
   const workload = useMemo(() => buildWorkload(rows), [rows]);
 
+  async function exportFiltered() {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("项目监管清单");
+    const statusLabel = STATUS_OPTIONS.find((item) => item.value === status)?.label ?? "全部状态";
+    const teamLabel = team === "ALL" ? "全部项目组" : TEAM_LABEL[team];
+    const conditions = [
+      query.trim() ? `关键词：${query.trim()}` : "关键词：全部",
+      `项目经理：${manager === "ALL" ? "全部项目经理" : manager}`,
+      `项目组：${teamLabel}`,
+      `状态：${statusLabel}`,
+    ].join("；");
+    const headers = ["优先级", "项目编号", "项目名称", "项目经理", "项目组", "当前阶段", "当前状态", "提醒节点", "提醒说明", "计划日期"];
+
+    sheet.mergeCells("A1:J1");
+    sheet.getCell("A1").value = "项目监管清单";
+    sheet.getCell("A1").font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+    sheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
+    sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF147154" } };
+    sheet.getRow(1).height = 28;
+    sheet.addRow(["导出时间", new Date().toLocaleString("zh-CN"), "项目数量", filtered.length]);
+    sheet.addRow(["筛选条件", conditions]);
+    sheet.addRow([]);
+    sheet.addRow(headers);
+    filtered.forEach((row) => sheet.addRow([
+      rowVisual(row.status, row.needsFollowUp).priorityLabel,
+      row.project.code || "",
+      row.project.name,
+      row.managers.join("、"),
+      row.project.team ? TEAM_LABEL[row.project.team] : "未分组",
+      row.phaseLabel,
+      row.statusLabel,
+      row.reminderNode,
+      row.reminderDetail,
+      formatPlanDate(row.plannedDate),
+    ]));
+    sheet.getRow(5).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    sheet.getRow(5).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF3C8066" } };
+    sheet.getRow(5).alignment = { horizontal: "center", vertical: "middle" };
+    sheet.views = [{ state: "frozen", ySplit: 5 }];
+    sheet.autoFilter = { from: "A5", to: `J${Math.max(5, filtered.length + 5)}` };
+    sheet.columns = [{ width: 14 }, { width: 22 }, { width: 48 }, { width: 22 }, { width: 16 }, { width: 16 }, { width: 18 }, { width: 18 }, { width: 38 }, { width: 16 }];
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber >= 5) row.alignment = { vertical: "middle", wrapText: true };
+      if (rowNumber > 5) row.height = 34;
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const url = URL.createObjectURL(new Blob([new Uint8Array(buffer) as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const anchor = document.createElement("a");
+    const conditionName = [manager !== "ALL" ? manager : "", team !== "ALL" ? teamLabel : "", status !== "ALL" ? statusLabel : ""].filter(Boolean).join("_") || "全部项目";
+    anchor.href = url;
+    anchor.download = `项目监管清单_${safeFileName(conditionName)}_${fmtDate(new Date())}.xlsx`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="project-monitor -mx-4 -my-6 min-h-[calc(100vh-3.5rem)] bg-[#f2f7f3] px-5 py-6 text-[#10291f] sm:px-7">
       <div className="mx-auto max-w-[1760px] space-y-5">
@@ -135,11 +192,12 @@ function ProjectsPageInner() {
             <div><div className="flex flex-wrap items-baseline gap-x-5"><h1 className="text-3xl font-black tracking-tight text-[#09271d]">监管清单</h1><p className="text-lg text-[#6f837b]">共显示 {filtered.length} / {rows.length} 个项目</p></div><p className="mt-1 text-sm text-[#6f837b]">完整项目库：用于查看全部项目、组合筛选、分组管理并逐项维护资料与节点。</p></div>
             <Link href="/projects/new" className="inline-flex items-center gap-1 rounded-full bg-[#dfece5] px-3 py-1.5 text-sm font-semibold text-[#146b50] transition hover:bg-[#d2e5db]"><Plus className="h-4 w-4"/>新建项目</Link>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(260px,1.5fr)_180px_180px_180px]">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(260px,1.5fr)_180px_180px_180px_auto]">
             <div className="relative"><Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#82958e]"/><Input className="h-12 rounded-xl border-[#d6e2dc] bg-white pl-11 text-base focus:border-[#2b8768] focus:ring-[#dceee5]" value={query} onChange={setQuery} placeholder="搜索项目、编号、负责人…"/></div>
             <Select className="h-12 w-full rounded-xl border-[#d6e2dc] px-4 text-base" value={manager} onChange={setManager} options={[{value:"ALL",label:"全部项目经理"},...managerOptions.map((name) => ({value:name,label:name}))]}/>
             <Select className="h-12 w-full rounded-xl border-[#d6e2dc] px-4 text-base" value={team} onChange={(value) => setTeam(value as TeamKey | "ALL")} options={TEAM_OPTIONS}/>
             <Select className="h-12 w-full rounded-xl border-[#d6e2dc] px-4 text-base" value={status} onChange={(value) => setStatus(value as StatusFilter)} options={STATUS_OPTIONS}/>
+            <Button className="h-12 whitespace-nowrap" variant="secondary" onClick={exportFiltered}><Download className="h-4 w-4"/>导出筛选结果</Button>
           </div>
         </div>
 
@@ -224,3 +282,4 @@ function normalizeStatus(value: string | null): StatusFilter {
 }
 
 function formatPlanDate(date: Date | null) { return date ? fmtDate(date).replaceAll("-", ".") : "—"; }
+function safeFileName(value: string) { return value.replace(/[\\/:*?"<>|]/g, "-").slice(0, 80); }
