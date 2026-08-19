@@ -23,7 +23,7 @@ export default function ConfirmPage() {
     const grouped = new Map<string, string[]>();
     for (const project of projects) {
       const info = evaluate(project).statusInfo; const nodes = confirmationMilestones(info); if (!nodes.length) continue;
-      const detail = `- ${project.code || "无编号"} ${project.name}：${nodes.map((node) => `${node.name}（计划 ${formatDate(node.plannedDate)}）`).join("、")}`;
+      const detail = `- ${project.name}：${nodes.map((node) => `${node.name}（计划 ${formatDate(node.plannedDate)}）`).join("、")}`;
       for (const manager of project.managers) grouped.set(manager, [...(grouped.get(manager) ?? []), detail]);
     }
     return [...grouped].map(([name, details]) => ({ name, details }));
