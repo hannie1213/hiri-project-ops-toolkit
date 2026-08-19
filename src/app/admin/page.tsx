@@ -37,7 +37,7 @@ export default function AdminPage() {
   }
 
   return <div className="mx-auto max-w-5xl space-y-5">
-    <div><h1 className="text-xl font-bold text-slate-900">浏览器数据管理</h1><p className="mt-1 text-sm text-slate-500">本工具数据保存在当前浏览器，不会自动同步到其他电脑。</p></div>
+    <div className="page-heading"><h1>浏览器数据管理</h1><p className="mt-1 text-sm">本工具数据保存在当前浏览器，不会自动同步到其他电脑。</p></div>
     {message && <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">{message}</div>}
     <div className="grid gap-4 sm:grid-cols-2">
       <Card><div className="p-5"><div className="flex items-center gap-2 text-sm text-slate-500"><HardDrive className="h-4 w-4"/>当前项目数量</div><div className="mt-2 text-3xl font-bold text-slate-900">{summary.projectCount}</div></div></Card>

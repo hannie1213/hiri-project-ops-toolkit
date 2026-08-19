@@ -83,9 +83,9 @@ export default function RemindersPage() {
 
   return (
     <div className="space-y-5">
-      <div>
+      <div className="page-heading">
         <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
-          <Bell className="h-5 w-5 text-blue-600" /> 到期提醒
+          <Bell className="h-5 w-5 text-[#147154]" /> 到期提醒
         </h1>
         <p className="mt-0.5 text-sm text-slate-500">
           今日 {today} · 已验收项目不参与提醒 · 节点实际日期未填写且计划日期临近时进入提醒
@@ -111,7 +111,7 @@ export default function RemindersPage() {
                 <Link
                   key={idx}
                   href={`/projects/detail?id=${i.projectId}`}
-                  className="flex items-center justify-between px-5 py-3 transition hover:bg-slate-50"
+                  className="flex items-center justify-between px-5 py-3 transition hover:bg-[#f3f8f5]"
                 >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-slate-800">{i.projectName}</div>

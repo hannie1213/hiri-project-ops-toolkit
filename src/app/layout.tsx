@@ -11,15 +11,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="zh-CN">
       <body>
         <div className="min-h-screen flex flex-col">
-          <header className="sticky top-0 z-30 border-b bg-white/90 backdrop-blur">
-            <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
+          <header className="sticky top-0 z-30 border-b border-[#dbe6e0] bg-white/92 backdrop-blur">
+            <div className="mx-auto flex h-16 max-w-[1760px] items-center justify-between px-4">
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#117455] text-sm font-bold text-white shadow-sm">
                   产
                 </div>
-                <span className="font-semibold">产品项目部工具优化平台</span>
+                <span className="font-bold text-[#10291f]">产品项目部工具优化平台</span>
               </div>
-              <nav className="flex items-center gap-1 text-sm">
+              <nav className="flex items-center gap-1 overflow-x-auto text-sm">
                 <NavLink href="/">仪表盘</NavLink>
                 <NavLink href="/projects">项目管理</NavLink>
                 <NavLink href="/import">导入</NavLink>
@@ -30,8 +30,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </nav>
             </div>
           </header>
-          <main className="mx-auto w-full max-w-[1760px] flex-1 px-4 py-6">{children}</main>
-          <footer className="border-t py-4 text-center text-xs text-slate-400">
+          <main className="app-main mx-auto w-full max-w-[1760px] flex-1 px-4 py-6">{children}</main>
+          <footer className="border-t border-[#dbe6e0] bg-white/60 py-4 text-center text-xs text-[#7b8e86]">
             本工具数据保存在当前浏览器，不会自动同步到其他电脑。
           </footer>
         </div>
@@ -44,7 +44,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   return (
     <a
       href={href}
-      className="rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+      className="rounded-xl px-3 py-2 text-[#587066] transition hover:bg-[#e8f2ed] hover:text-[#0f5f45]"
     >
       {children}
     </a>

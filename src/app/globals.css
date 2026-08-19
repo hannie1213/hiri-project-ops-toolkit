@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: 220 33% 98%;
-  --foreground: 224 30% 14%;
-  --primary: 222 84% 52%;
+  --background: 135 24% 96%;
+  --foreground: 155 43% 11%;
+  --primary: 157 73% 26%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 20% 95%;
-  --muted: 220 14% 92%;
-  --muted-foreground: 220 10% 42%;
-  --accent: 222 84% 96%;
-  --border: 220 14% 88%;
+  --secondary: 145 23% 94%;
+  --muted: 145 15% 91%;
+  --muted-foreground: 153 10% 44%;
+  --accent: 148 30% 94%;
+  --border: 145 17% 86%;
   --card: 0 0% 100%;
   --destructive: 0 72% 51%;
   --success: 142 71% 35%;
@@ -39,6 +39,39 @@ body {
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+.page-heading h1 {
+  color: #09271d !important;
+  font-size: 1.75rem !important;
+  line-height: 2.25rem;
+  font-weight: 900 !important;
+  letter-spacing: -0.02em;
+}
+
+.page-heading p {
+  color: #6f837b !important;
+  line-height: 1.5rem;
+}
+
+.app-main table thead tr {
+  background: #f2f7f4 !important;
+  color: #526b61 !important;
+}
+
+.app-main table tbody tr:hover {
+  background: #f5faf7;
+}
+
+.app-main textarea {
+  border-color: #d6e2dc !important;
+  border-radius: 0.75rem;
+  outline: none;
+}
+
+.app-main textarea:focus {
+  border-color: #2b8768 !important;
+  box-shadow: 0 0 0 2px #dceee5;
 }
 
 /* 监管清单采用稳定的八列比例；窄屏自动退化为卡片布局。 */

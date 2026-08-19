@@ -128,7 +128,7 @@ export default function ImportPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <div>
+      <div className="page-heading">
         <h1 className="text-xl font-bold text-slate-900">Excel 导入</h1>
         <p className="mt-0.5 text-sm text-slate-500">
           读取工作表「所有项目进度计划情况」，自动识别项目名称 / 负责人 / 各节点计划与实际日期
@@ -141,20 +141,20 @@ export default function ImportPage() {
           desc="支持 .xlsx / .xls / .csv；Excel 必须包含名为「所有项目进度计划情况」的工作表，文件仅在浏览器本地解析"
         />
         <div className="space-y-4 p-5">
-          <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 py-10 transition hover:border-blue-400 hover:bg-blue-50/40">
-            <FileSpreadsheet className="h-10 w-10 text-slate-400" />
-            <span className="mt-3 text-sm font-medium text-slate-600">{fileName || "点击选择 Excel 文件"}</span>
-            <span className="mt-1 text-xs text-slate-400">上传后自动解析预览</span>
+          <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#bcd5c8] bg-[#f4f9f6] py-10 transition hover:border-[#45a07b] hover:bg-[#ecf6f0]">
+            <FileSpreadsheet className="h-10 w-10 text-[#4f9377]" />
+            <span className="mt-3 text-sm font-semibold text-[#365f50]">{fileName || "点击选择 Excel 文件"}</span>
+            <span className="mt-1 text-xs text-[#7b8e86]">上传后自动解析预览</span>
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={pickFile} />
           </label>
 
           <div className="flex flex-wrap items-center gap-4">
             <label className="flex items-center gap-2 text-sm text-slate-600">
-              <input type="radio" checked={mode === "upsert"} onChange={() => setMode("upsert")} className="accent-blue-600" />
+              <input type="radio" checked={mode === "upsert"} onChange={() => setMode("upsert")} className="accent-[#117455]" />
               按项目名称更新（已存在则更新节点）
             </label>
             <label className="flex items-center gap-2 text-sm text-slate-600">
-              <input type="radio" checked={mode === "replace"} onChange={() => setMode("replace")} className="accent-blue-600" />
+              <input type="radio" checked={mode === "replace"} onChange={() => setMode("replace")} className="accent-[#117455]" />
               清空现有数据后导入（危险）
             </label>
           </div>

@@ -35,7 +35,7 @@ export default function ConfirmPage() {
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); const a = document.createElement("a"); a.href = url; a.download = `项目状态确认联系清单_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
   }
   return <div className="mx-auto max-w-5xl space-y-5">
-    <div><h1 className="text-xl font-bold text-slate-900">项目状态确认</h1><p className="mt-1 text-sm text-slate-500">计划日期过去至少一天且实际日期为空的未验收项目会进入名单；进入名单不代表延期。</p></div>
+    <div className="page-heading"><h1>项目状态确认</h1><p className="mt-1 text-sm">计划日期过去至少一天且实际日期为空的未验收项目会进入名单；进入名单不代表延期。</p></div>
     <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">静态网页无法控制本机钉钉客户端，本功能仅生成、复制和导出提醒文案。</div>
     {message && <div className="text-sm text-green-700">{message}</div>}
     <Card><CardHeader title="确认文案模板" desc="支持 {姓名}、{项目数}、{项目明细}、{确认日期}"/><div className="space-y-3 p-5"><textarea className="min-h-28 w-full rounded-lg border border-slate-300 p-3 text-sm" value={template} onChange={(e) => setTemplate(e.target.value)}/><div className="flex flex-wrap gap-2"><Button variant="primary" onClick={() => { saveSettings({ confirmationTemplate: template }); setMessage("模板已保存"); }}><Save className="h-4 w-4"/>保存文案</Button><Button variant="secondary" onClick={() => setTemplate(DEFAULT_TEMPLATE)}><RotateCcw className="h-4 w-4"/>恢复默认文案</Button><Button variant="secondary" onClick={() => copy(contacts.map((c) => render(template, c)).join("\n\n"))}><Copy className="h-4 w-4"/>复制全部文案</Button><Button variant="secondary" onClick={exportContacts}><Download className="h-4 w-4"/>导出联系清单</Button></div></div></Card>

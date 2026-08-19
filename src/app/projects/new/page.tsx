@@ -66,7 +66,7 @@ export default function NewProjectPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
-      <div>
+      <div className="page-heading">
         <h1 className="text-xl font-bold text-slate-900">新建项目</h1>
         <p className="mt-0.5 text-sm text-slate-500">手工录入项目信息与进度节点</p>
       </div>

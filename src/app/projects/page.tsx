@@ -129,9 +129,8 @@ function ProjectsPageInner() {
     <div className="project-monitor -mx-4 -my-6 min-h-[calc(100vh-3.5rem)] bg-[#f2f7f3] px-5 py-6 text-[#10291f] sm:px-7">
       <div className="mx-auto max-w-[1760px] space-y-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
-            <h1 className="text-3xl font-black tracking-tight text-[#09271d]">监管清单</h1>
-            <p className="text-lg text-[#6f837b]">共显示 {filtered.length} / {rows.length} 个项目</p>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <div><div className="flex flex-wrap items-baseline gap-x-5"><h1 className="text-3xl font-black tracking-tight text-[#09271d]">监管清单</h1><p className="text-lg text-[#6f837b]">共显示 {filtered.length} / {rows.length} 个项目</p></div><p className="mt-1 text-sm text-[#6f837b]">完整项目库：用于查看全部项目、组合筛选、分组管理并逐项维护资料与节点。</p></div>
             <Link href="/projects/new" className="inline-flex items-center gap-1 rounded-full bg-[#dfece5] px-3 py-1.5 text-sm font-semibold text-[#146b50] transition hover:bg-[#d2e5db]"><Plus className="h-4 w-4"/>新建项目</Link>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(260px,1.5fr)_180px_180px_180px]">

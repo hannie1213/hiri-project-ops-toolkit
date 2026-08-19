@@ -40,9 +40,9 @@ export default function WeeklyPage() {
   }
 
   return <div className="mx-auto max-w-6xl space-y-5">
-    <div><h1 className="text-xl font-bold text-slate-900">周报 Excel 合成</h1><p className="mt-1 text-sm text-slate-500">只负责选择和合成个人周报文件，不在线填写、编辑、审批或提交周报。</p></div>
+    <div className="page-heading"><h1>周报 Excel 合成</h1><p className="mt-1 text-sm">只负责选择和合成个人周报文件，不在线填写、编辑、审批或提交周报。</p></div>
     <Card><CardHeader title="选择个人周报" desc="根据文件名识别姓名；每个文件只读取第一个工作表"/><div className="space-y-4 p-5">
-      <label className="flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 py-8 hover:border-blue-400"><Upload className="h-8 w-8 text-slate-400"/><span className="mt-2 text-sm font-medium">选择多个 .xlsx / .xls 文件</span><input type="file" multiple accept=".xlsx,.xls" className="hidden" onChange={choose}/></label>
+      <label className="flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed border-[#bcd5c8] bg-[#f4f9f6] py-8 transition hover:border-[#45a07b] hover:bg-[#ecf6f0]"><Upload className="h-8 w-8 text-[#4f9377]"/><span className="mt-2 text-sm font-semibold text-[#365f50]">选择多个 .xlsx / .xls 文件</span><input type="file" multiple accept=".xlsx,.xls" className="hidden" onChange={choose}/></label>
       <div className="max-w-xs"><label className="mb-1 block text-sm font-medium text-slate-700">汇总日期</label><Input type="date" value={dateLabel} onChange={setDateLabel}/></div>
       {message && <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">{message}</div>}
       <Button variant="primary" onClick={merge} disabled={busy}><Download className="h-4 w-4"/>{busy ? "正在合成…" : "生成三个分组文件"}</Button>

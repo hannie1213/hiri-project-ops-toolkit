@@ -168,7 +168,7 @@ export default function ProjectForm({
             </div>
           )}
           {form.milestones.map((m, i) => (
-            <div key={i} className="grid grid-cols-1 items-center gap-2 rounded-lg border bg-slate-50/60 p-3 sm:grid-cols-[auto_1fr_1fr_1fr_auto]">
+            <div key={i} className="grid grid-cols-1 items-center gap-2 rounded-xl border border-[#dbe6e0] bg-[#f5f9f7] p-3 sm:grid-cols-[auto_1fr_1fr_1fr_auto]">
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => moveMilestone(i, -1)} className="rounded p-1 text-slate-400 hover:bg-slate-200">
                   <ArrowUp className="h-3.5 w-3.5" />
@@ -208,7 +208,7 @@ export default function ProjectForm({
 function Field({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">
+      <label className="mb-1 block text-sm font-semibold text-[#365f50]">
         {label}
         {desc && <span className="ml-1 font-normal text-xs text-slate-400">{desc}</span>}
       </label>
