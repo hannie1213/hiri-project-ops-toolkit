@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -42,11 +43,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <a
+    <Link
       href={href}
       className="rounded-xl px-3 py-2 text-[#587066] transition hover:bg-[#e8f2ed] hover:text-[#0f5f45]"
     >
       {children}
-    </a>
+    </Link>
   );
 }
