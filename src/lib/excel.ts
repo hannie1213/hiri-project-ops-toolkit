@@ -11,12 +11,25 @@ export const WEEKLY_GROUPS = {
   售后服务组: [...TEAM_MEMBERS.AFTERSALES],
 } as const;
 
+export type WeeklyGroupKey = keyof typeof WEEKLY_GROUPS;
+
+export const WEEKLY_GROUP_LABELS: Record<WeeklyGroupKey, string> = {
+  项目交付: "项目交付组（项目 A/B/C 组）",
+  质量控制组: "质量控制组",
+  售后服务组: "售后服务组",
+};
+
 export function recognizeWeeklyMember(fileName: string): string | null {
-  return Object.values(WEEKLY_GROUPS).flat().find((name) => fileName.includes(name)) ?? null;
+  const baseName = fileName.replace(/\.(xlsx|xls)$/i, "").trim();
+  return Object.values(WEEKLY_GROUPS).flat().find((name) => baseName === name) ?? null;
+}
+
+export function weeklyGroupForMember(memberName: string): WeeklyGroupKey | null {
+  return (Object.keys(WEEKLY_GROUPS) as WeeklyGroupKey[]).find((group) => (WEEKLY_GROUPS[group] as readonly string[]).includes(memberName)) ?? null;
 }
 
 export async function buildWeeklyGroupWorkbooks(files: Array<{ fileName: string; memberName: string; buffer: Uint8Array }>, dateLabel: string): Promise<Array<{ fileName: string; buffer: Uint8Array }>> {
-  const groups: Array<{ key: keyof typeof WEEKLY_GROUPS; filePrefix: string }> = [
+  const groups: Array<{ key: WeeklyGroupKey; filePrefix: string }> = [
     { key: "项目交付", filePrefix: "项目交付周报" }, { key: "质量控制组", filePrefix: "质量控制组周报" }, { key: "售后服务组", filePrefix: "售后服务组周报" },
   ];
   const results: Array<{ fileName: string; buffer: Uint8Array }> = [];

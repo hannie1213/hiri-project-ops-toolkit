@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
-import { buildWeeklyGroupWorkbooks, parseProgressSheet, TARGET_SHEET } from "../src/lib/excel";
+import { buildWeeklyGroupWorkbooks, parseProgressSheet, recognizeWeeklyMember, TARGET_SHEET, weeklyGroupForMember, WEEKLY_GROUPS } from "../src/lib/excel";
 
 async function bytes(workbook: ExcelJS.Workbook) { return new Uint8Array(await workbook.xlsx.writeBuffer()); }
 
 describe("Excel 浏览器解析与周报合成", () => {
+  it("周报文件名必须与人员姓名完全一致并按固定名单分组", () => {
+    const deliveryMember = WEEKLY_GROUPS.项目交付[0];
+    const qualityMember = WEEKLY_GROUPS.质量控制组[0];
+    const aftersalesMember = WEEKLY_GROUPS.售后服务组[0];
+    expect(recognizeWeeklyMember(`${deliveryMember}.xlsx`)).toBe(deliveryMember);
+    expect(recognizeWeeklyMember(`${deliveryMember}个人周报.xlsx`)).toBeNull();
+    expect(weeklyGroupForMember(deliveryMember)).toBe("项目交付");
+    expect(weeklyGroupForMember(qualityMember)).toBe("质量控制组");
+    expect(weeklyGroupForMember(aftersalesMember)).toBe("售后服务组");
+  });
   it("找不到指定工作表时明确停止", async () => {
     const wb = new ExcelJS.Workbook(); wb.addWorksheet("其他工作表").addRow(["项目名称", "验收计划"]);
     const result = await parseProgressSheet(await bytes(wb), "test.xlsx");
