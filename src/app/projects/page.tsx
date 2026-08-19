@@ -3,7 +3,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import ExcelJS from "exceljs";
 import { ArrowRight, Download, Plus, Search } from "lucide-react";
 import { Button, Input, Select } from "@/components/ui";
 import { evaluate, listProjects, subscribe, TEAM_LABEL, TEAMS, type Project, type TeamKey } from "@/lib/store";
@@ -129,6 +128,7 @@ function ProjectsPageInner() {
   const workload = useMemo(() => buildWorkload(rows), [rows]);
 
   async function exportFiltered() {
+    const ExcelJS = (await import("exceljs")).default;
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("项目监管清单");
     const statusLabel = STATUS_OPTIONS.find((item) => item.value === status)?.label ?? "全部状态";
