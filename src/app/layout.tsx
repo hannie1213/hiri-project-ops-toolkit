@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <NavLink href="/import">导入</NavLink>
                 <NavLink href="/reminders">提醒清单</NavLink>
                 <NavLink href="/weekly">周报合成</NavLink>
-                <NavLink href="/confirm">项目状态确认</NavLink>
+                <NavLink href="/confirm">项目确认提醒</NavLink>
                 <NavLink href="/admin">本地数据</NavLink>
               </nav>
             </div>

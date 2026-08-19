@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, FileSpreadsheet, Upload } from "lucide-react";
+import { Copy, Download, FileSpreadsheet, Upload } from "lucide-react";
 import { Button, Card, CardHeader, Input } from "@/components/ui";
 import { buildWeeklyGroupWorkbooks, recognizeWeeklyMember, WEEKLY_GROUPS } from "@/lib/excel";
 
@@ -38,6 +38,8 @@ export default function WeeklyPage() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "合成失败"); }
     finally { setBusy(false); }
   }
+  function reminderText(name: string) { return `@${name}，你好，截至 ${dateLabel} 尚未收到你的本周周报，请尽快提交，文件名请包含本人姓名，谢谢。`; }
+  async function copyReminder(text: string, name?: string) { if (!text.trim()) return setMessage("当前没有需要提醒的人员"); await navigator.clipboard.writeText(text); setMessage(name ? `已复制 ${name} 的周报提醒文案` : "已复制全部未提交周报提醒文案"); }
 
   return <div className="mx-auto max-w-6xl space-y-5">
     <div className="page-heading"><h1>周报 Excel 合成</h1><p className="mt-1 text-sm">只负责选择和合成个人周报文件，不在线填写、编辑、审批或提交周报。</p></div>
@@ -49,7 +51,7 @@ export default function WeeklyPage() {
     </div></Card>
     <div className="grid gap-4 lg:grid-cols-2">
       <Card><CardHeader title={`已选择（${recognized.length}）`}/><div className="max-h-72 divide-y overflow-y-auto">{recognized.map((item) => <div key={item.file.name + item.file.size} className="flex items-center justify-between px-4 py-2 text-sm"><span className="truncate">{item.file.name}</span><span className="ml-3 rounded bg-green-50 px-2 py-0.5 text-green-700">{item.member}{counts[item.member] > 1 ? " · 重复" : ""}</span></div>)}{!recognized.length && <div className="p-6 text-center text-sm text-slate-400">暂无</div>}</div></Card>
-      <Card><CardHeader title={`未选择（${missing.length}）`}/><div className="flex max-h-72 flex-wrap gap-2 overflow-y-auto p-4">{missing.map((name) => <span key={name} className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">{name}</span>)}</div></Card>
+      <Card><CardHeader title={`未选择周报（${missing.length}）`} desc="根据当前已选择文件生成可发送的提醒文案" right={<Button variant="secondary" size="sm" onClick={() => copyReminder(missing.map(reminderText).join("\n\n"))}><Copy className="h-4 w-4"/>复制全部</Button>}/><div className="max-h-72 divide-y overflow-y-auto">{missing.map((name) => <div key={name} className="flex items-start justify-between gap-3 px-4 py-3"><p className="text-sm leading-5 text-slate-600">{reminderText(name)}</p><Button variant="ghost" size="sm" title={`复制${name}提醒`} onClick={() => copyReminder(reminderText(name), name)}><Copy className="h-4 w-4"/></Button></div>)}{!missing.length && <div className="p-6 text-center text-sm text-slate-400">所有人员均已选择周报文件</div>}</div></Card>
       <Card><CardHeader title={`无法识别（${selected.filter((item) => !item.member).length}）`}/><div className="p-4 text-sm text-red-600">{selected.filter((item) => !item.member).map((item) => <div key={item.file.name}>· {item.file.name}</div>)}{selected.every((item) => item.member) && "暂无"}</div></Card>
       <Card><CardHeader title={`重复文件（${duplicates.length} 人）`}/><div className="p-4 text-sm text-red-600">{duplicates.length ? duplicates.join("、") : "暂无"}</div></Card>
     </div>

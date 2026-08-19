@@ -100,6 +100,18 @@ export function projectPhaseLabel(info: ProjectStatusInfo): string {
   return `${next.name}中`;
 }
 
+export type ReminderBucket = "计划待填" | "7天内" | "14天内" | "30天内" | "60天内";
+
+/** 每个未完成节点只进入一个最近提醒区间，避免在多个窗口中重复出现。 */
+export function reminderBucket(plannedDate: Date | null, remainingDays: number | null): ReminderBucket | null {
+  if (!plannedDate) return "计划待填";
+  if (remainingDays == null || remainingDays < 0 || remainingDays > 60) return null;
+  if (remainingDays <= 7) return "7天内";
+  if (remainingDays <= 14) return "14天内";
+  if (remainingDays <= 30) return "30天内";
+  return "60天内";
+}
+
 function startOfDay(date: Date): Date { return new Date(date.getFullYear(), date.getMonth(), date.getDate()); }
 function diffDays(a: Date, b: Date): number { return Math.round((a.getTime() - b.getTime()) / 86400000); }
 

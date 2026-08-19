@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confirmationMilestones, evaluateMilestone, evaluateProject, projectPhaseLabel, upcomingMilestones } from "../src/lib/status";
+import { confirmationMilestones, evaluateMilestone, evaluateProject, projectPhaseLabel, reminderBucket, upcomingMilestones } from "../src/lib/status";
 import { splitPm } from "../src/lib/utils";
 
 const TODAY = new Date(2026, 7, 14);
@@ -22,6 +22,14 @@ describe("项目状态验收规则", () => {
     const acceptance = evaluateProject([ms("调试", d(-2), d(-2)), ms("验收", d(10), null, 1)], TODAY);
     expect(projectPhaseLabel(construction)).toBe("施工中");
     expect(projectPhaseLabel(acceptance)).toBe("待验收");
+  });
+  it("提醒节点只进入一个最近区间", () => {
+    expect(reminderBucket(null, null)).toBe("计划待填");
+    expect(reminderBucket(d(3), 3)).toBe("7天内");
+    expect(reminderBucket(d(10), 10)).toBe("14天内");
+    expect(reminderBucket(d(20), 20)).toBe("30天内");
+    expect(reminderBucket(d(45), 45)).toBe("60天内");
+    expect(reminderBucket(d(61), 61)).toBeNull();
   });
   it("前置节点实际晚于计划显示风险，验收未完成时不显示延期完成", () => {
     const info = evaluateProject([ms("进场", d(-5), d(-2)), ms("验收", d(20), null, 1)], TODAY);

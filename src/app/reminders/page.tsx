@@ -2,24 +2,25 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, Timer } from "lucide-react";
-import { Card, CardHeader } from "@/components/ui";
+import ExcelJS from "exceljs";
+import { Bell, Download, Timer } from "lucide-react";
+import { Button, Card, CardHeader } from "@/components/ui";
 import { listProjects, evaluate, subscribe } from "@/lib/store";
-import { upcomingMilestones } from "@/lib/status";
+import { reminderBucket } from "@/lib/status";
 import { fmtDate } from "@/lib/utils";
 
 type ReminderItem = {
   projectId: string;
+  projectCode: string;
   projectName: string;
   pmList: string[];
   milestoneName: string;
   plannedDate: string;
-  days: number;
+  days: number | null;
   bucket: string;
 };
 
 const BUCKETS = ["计划待填", "7天内", "14天内", "30天内", "60天内"];
-const WINDOWS = [7, 14, 30, 60];
 const BUCKET_STYLE: Record<string, string> = {
   "计划待填": "border-purple-200 bg-purple-50 text-purple-700",
   "7天内": "border-red-200 bg-red-50 text-red-700",
@@ -33,36 +34,23 @@ function buildItems(): ReminderItem[] {
   for (const p of listProjects()) {
     const ev = evaluate(p);
     if (ev.statusInfo.accepted) continue;
-    const ups = upcomingMilestones(ev.statusInfo);
-    for (const u of ups.noPlan) {
+    for (const milestone of ev.statusInfo.milestoneStatus) {
+      if (!milestone.actualMissing) continue;
+      const bucket = reminderBucket(milestone.plannedDate, milestone.remainingDays);
+      if (!bucket) continue;
       items.push({
         projectId: p.id,
+        projectCode: p.code || "无编号",
         projectName: p.name,
         pmList: p.managers,
-        milestoneName: u.name,
-        plannedDate: "未排期",
-        days: 0,
-        bucket: "计划待填",
+        milestoneName: milestone.name,
+        plannedDate: milestone.plannedDate ? fmtDate(milestone.plannedDate) : "未排期",
+        days: milestone.remainingDays,
+        bucket,
       });
     }
-    for (const w of WINDOWS) {
-      for (const u of ups[w]) {
-        const days = u.remainingDays ?? 0;
-        if (days >= 0) {
-          items.push({
-            projectId: p.id,
-            projectName: p.name,
-            pmList: p.managers,
-            milestoneName: u.name,
-            plannedDate: fmtDate(u.plannedDate),
-            days,
-            bucket: `${w}天内`,
-          });
-        }
-      }
-    }
   }
-  return items;
+  return items.sort((a, b) => BUCKETS.indexOf(a.bucket) - BUCKETS.indexOf(b.bucket) || (a.days ?? 9999) - (b.days ?? 9999));
 }
 
 export default function RemindersPage() {
@@ -81,22 +69,40 @@ export default function RemindersPage() {
     list: items.filter((i) => i.bucket === b),
   }));
 
+  async function exportItems(format: "xlsx" | "csv") {
+    const header = ["提醒区间", "项目编号", "项目名称", "项目经理", "提醒节点", "计划日期", "剩余天数"];
+    const rows = items.map((item) => [item.bucket, item.projectCode, item.projectName, item.pmList.join("、"), item.milestoneName, item.plannedDate, item.days ?? "待排期"]);
+    const date = fmtDate(new Date());
+    if (format === "csv") {
+      const csv = "\ufeff" + [header, ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\r\n");
+      download(new Blob([csv], { type: "text/csv;charset=utf-8" }), `到期提醒清单_${date}.csv`);
+      return;
+    }
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("到期提醒清单");
+    sheet.addRow(header); rows.forEach((row) => sheet.addRow(row));
+    sheet.getRow(1).font = { bold: true }; sheet.views = [{ state: "frozen", ySplit: 1 }];
+    sheet.columns = [{ width: 14 }, { width: 20 }, { width: 42 }, { width: 20 }, { width: 18 }, { width: 16 }, { width: 12 }];
+    download(new Blob([new Uint8Array(await workbook.xlsx.writeBuffer()) as BlobPart]), `到期提醒清单_${date}.xlsx`);
+  }
+
   return (
     <div className="space-y-5">
-      <div className="page-heading">
-        <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+      <div className="page-heading flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div><h1 className="flex items-center gap-2 text-xl font-bold text-slate-900">
           <Bell className="h-5 w-5 text-[#147154]" /> 到期提醒
         </h1>
         <p className="mt-0.5 text-sm text-slate-500">
           今日 {today} · 已验收项目不参与提醒 · 节点实际日期未填写且计划日期临近时进入提醒
-        </p>
+        </p></div>
+        <div className="flex gap-2"><Button variant="secondary" onClick={() => exportItems("xlsx")}><Download className="h-4 w-4"/>导出 Excel</Button><Button variant="secondary" onClick={() => exportItems("csv")}><Download className="h-4 w-4"/>导出 CSV</Button></div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         {grouped.map((g) => (
           <Card key={g.bucket}>
             <CardHeader
-              title={`${g.bucket}到期`}
+              title={g.bucket === "计划待填" ? "计划待填" : `${g.bucket}到期`}
               right={
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                   {g.list.length} 项
@@ -121,7 +127,7 @@ export default function RemindersPage() {
                   </div>
                   <span className={`ml-3 shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${BUCKET_STYLE[g.bucket]}`}>
                     <Timer className="mr-0.5 inline h-3 w-3" />
-                    {i.days}天
+                    {i.days == null ? "待排期" : `${i.days}天`}
                   </span>
                 </Link>
               ))}
@@ -132,3 +138,5 @@ export default function RemindersPage() {
     </div>
   );
 }
+
+function download(blob: Blob, name: string) { const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click(); URL.revokeObjectURL(url); }
