@@ -78,7 +78,7 @@ export function Input({
       name={name}
       list={list}
       placeholder={placeholder}
-      onChange={(e) => onChange?.(e.target.value)}
+      onInput={(e) => onChange?.(e.currentTarget.value)}
       className={`w-full rounded-xl border border-[#d6e2dc] bg-white px-3 py-2 text-sm outline-none transition focus:border-[#2b8768] focus:ring-2 focus:ring-[#dceee5] ${className}`}
     />
   );

@@ -42,6 +42,7 @@ type DetailView = {
       dateIssueReason: string | null;
       isPlannedPassed: boolean;
       actualMissing: boolean;
+      completedLate: boolean;
       lateDays: number | null;
       remainingDays: number | null;
       plannedDate: Date | null;
@@ -427,6 +428,12 @@ function MilestoneFlag({ m }: { m: DetailView["evaluate"]["milestoneStatus"][num
         <XCircle className="h-3.5 w-3.5" /> 日期待核对
       </span>
     );
+  if (m.actualDate && m.completedLate)
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-600">
+        <AlertTriangle className="h-3.5 w-3.5" /> 延期完成
+      </span>
+    );
   if (m.actualDate)
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
@@ -439,11 +446,13 @@ function MilestoneFlag({ m }: { m: DetailView["evaluate"]["milestoneStatus"][num
         <AlertTriangle className="h-3.5 w-3.5" /> 待补实际日期
       </span>
     );
-  return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
-      <RefreshCw className="h-3.5 w-3.5" /> 待补实际日期
-    </span>
-  );
+  if (m.plannedDate)
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600">
+        <RefreshCw className="h-3.5 w-3.5" /> 待执行
+      </span>
+    );
+  return <span className="text-xs font-medium text-slate-400">未排期</span>;
 }
 
 function fmt(d: Date | string | null): string {

@@ -150,7 +150,7 @@ export default function ProjectForm({
       <Card>
         <CardHeader
           title="进度节点"
-          desc="「验收」节点为终审依据；实际日期留空显示「待补实际日期」，计划已过显示「有延期风险」"
+          desc="「验收」节点为终审依据；实际晚于计划显示延期风险，计划已过且实际为空显示待补实际日期"
           right={
             <Button variant="secondary" onClick={addMilestone} className="text-xs">
               <Plus className="h-4 w-4" /> 添加节点

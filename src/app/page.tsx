@@ -2,63 +2,152 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import ExcelJS from "exceljs";
-import { ChevronRight, FilePlus2, Search } from "lucide-react";
-import { Button, Card, Input, Select } from "@/components/ui";
+import { AlertTriangle, ArrowRight, CalendarClock, CheckCircle2, CircleAlert, ClipboardList, FilePlus2, FolderKanban, ShieldCheck } from "lucide-react";
+import { Button, Card } from "@/components/ui";
 import { StatusBadge } from "@/components/ui/badge";
-import { evaluate, getSettings, listProjects, saveSettings, subscribe, TEAM_LABEL, TEAMS, type TeamKey } from "@/lib/store";
-import { confirmationMilestones, projectPhaseLabel, upcomingMilestones } from "@/lib/status";
+import { evaluate, getSettings, listProjects, saveSettings, subscribe } from "@/lib/store";
+import { confirmationMilestones, projectPhaseLabel, upcomingMilestones, type ProjectStatus } from "@/lib/status";
 import { fmtDate } from "@/lib/utils";
 
-type Row = ReturnType<typeof makeRows>[number];
-const windows = [7, 14, 30, 60] as const;
+type DashboardRow = ReturnType<typeof buildDashboardRows>[number];
 
-function makeRows(windowDays: number) {
+function buildDashboardRows() {
   return listProjects().map((project) => {
     const info = evaluate(project).statusInfo;
-    const upcoming = upcomingMilestones(info)[windowDays];
-    const confirm = confirmationMilestones(info);
-    const riskNodes = info.milestoneStatus.filter((m) => !m.isAcceptance && m.completedLate);
-    const dateNodes = info.milestoneStatus.filter((m) => m.hasDateIssue);
-    const reminder = dateNodes[0] ?? riskNodes[0] ?? confirm[0] ?? upcoming[0] ?? info.milestoneStatus.find((m) => m.actualMissing);
-    const days = reminder?.remainingDays ?? null;
-    const priority = info.hasDateIssue ? 1 : info.hasLateRisk ? 2 : confirm.length ? 3 : upcoming.length ? 4 : 5;
+    const confirmations = confirmationMilestones(info);
+    const upcoming = upcomingMilestones(info);
+    const riskNode = info.milestoneStatus.find((item) => !item.isAcceptance && item.completedLate);
+    const issueNode = info.milestoneStatus.find((item) => item.hasDateIssue);
+    const nextNode = info.milestoneStatus.slice().sort((a, b) => a.order - b.order).find((item) => item.actualMissing);
+    const reminder = issueNode ?? riskNode ?? confirmations[0] ?? upcoming[14][0] ?? nextNode;
+    const priority = info.hasDateIssue ? 1 : info.hasLateRisk ? 2 : confirmations.length ? 3 : upcoming[14].length ? 4 : 5;
+    const needsFollowUp = !info.accepted && priority < 5;
+    const timeLabel = issueNode ? "日期待核对" : riskNode ? "存在延期风险" : confirmations.length ? "计划已过，待补实际日期" : reminder?.remainingDays === 0 ? "今天到期" : reminder?.remainingDays != null && reminder.remainingDays > 0 ? `剩余 ${reminder.remainingDays} 天` : info.accepted ? info.acceptanceResult : "正常推进";
+
     return {
-      id: project.id, code: project.code || "—", name: project.name, pm: project.pmRaw || "—", managers: project.managers,
-      team: project.team, phaseLabel: projectPhaseLabel(info), computedStatus: info.status,
-      priority, reminderNode: reminder?.name || "—", plannedDate: reminder?.plannedDate ? fmtDate(reminder.plannedDate) : "—",
-      timeStatus: info.accepted ? info.acceptanceResult : reminder?.hasDateIssue ? "日期待核对" : reminder?.completedLate ? "有延期风险" : days === 0 ? "今天到期" : days != null && days > 0 ? `剩余 ${days} 天` : reminder?.isPlannedPassed ? "待补实际日期" : "正常",
-      riskNodes: riskNodes.map((m) => m.name).join("、"), pendingNodes: confirm.map((m) => m.name).join("、"), upcomingNodes: upcoming.map((m) => m.name).join("、"),
-      nextNode: info.milestoneStatus.find((m) => m.actualMissing)?.name || "—", remainingDays: days,
-      follow: !info.accepted && (info.hasDateIssue || info.hasLateRisk || confirm.length > 0 || upcoming.length > 0),
-      near: !info.accepted && upcoming.length > 0, confirm: confirm.length > 0,
+      id: project.id,
+      code: project.code || "无编号",
+      name: project.name,
+      managers: project.managers,
+      phaseLabel: projectPhaseLabel(info),
+      status: info.status,
+      accepted: info.accepted,
+      needsFollowUp,
+      priority,
+      reminderNode: reminder?.name || "暂无待办节点",
+      plannedDate: reminder?.plannedDate ? fmtDate(reminder.plannedDate) : "未排期",
+      timeLabel,
+      upcomingCounts: { 7: upcoming[7].length, 14: upcoming[14].length, 30: upcoming[30].length, 60: upcoming[60].length },
     };
   }).sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name, "zh"));
 }
 
 export default function DashboardPage() {
-  const [windowDays, setWindowDays] = useState<7 | 14 | 30 | 60>(() => getSettings().reminderWindow ?? 14);
-  const [rows, setRows] = useState<Row[]>([]); const [query, setQuery] = useState(""); const [manager, setManager] = useState("ALL");
-  const [team, setTeam] = useState("ALL"); const [status, setStatus] = useState("ALL"); const [showHelp, setShowHelp] = useState(false);
-  const refresh = useCallback(() => setRows(makeRows(windowDays)), [windowDays]);
-  useEffect(() => { refresh(); if (!getSettings().firstVisitSeen) setShowHelp(true); return subscribe("__all__", refresh); }, [refresh]);
-  const managers = useMemo(() => [...new Set(rows.flatMap((r) => r.managers))].sort((a,b) => a.localeCompare(b,"zh")), [rows]);
-  const filtered = rows.filter((row) => (query === "" || row.name.includes(query) || row.code.includes(query)) && (manager === "ALL" || row.managers.includes(manager)) && (team === "ALL" || row.team === team) && (status === "ALL" || row.computedStatus === status));
-  const stats = { follow: rows.filter((r) => r.follow).length, risk: rows.filter((r) => r.computedStatus === "LATE_RISK").length, near: rows.filter((r) => r.near).length, issue: rows.filter((r) => r.computedStatus === "DATE_ISSUE").length };
-  function setWindow(value: string) { const next = Number(value) as 7|14|30|60; setWindowDays(next); saveSettings({ reminderWindow: next }); }
-  async function exportRows(kind: "xlsx"|"csv") {
-    const header = ["优先级","项目编号","项目名称","项目经理","当前状态","延期风险节点","待补实际日期节点","临期节点","下一节点","计划日期","剩余天数"];
-    const data = filtered.map((r) => [r.priority,r.code,r.name,r.pm,r.phaseLabel,r.riskNodes,r.pendingNodes,r.upcomingNodes,r.nextNode,r.plannedDate,r.remainingDays ?? ""]);
-    if (kind === "csv") { const csv = "\ufeff" + [header,...data].map((line) => line.map((v) => `"${String(v).replaceAll('"','""')}"`).join(",")).join("\r\n"); download(new Blob([csv],{type:"text/csv;charset=utf-8"}),"项目提醒清单.csv"); return; }
-    const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet("提醒清单"); ws.addRow(header); data.forEach((r) => ws.addRow(r)); ws.getRow(1).font = {bold:true}; ws.columns.forEach((c) => c.width = 18); download(new Blob([new Uint8Array(await wb.xlsx.writeBuffer()) as BlobPart]),"项目提醒清单.xlsx");
-  }
-  return <div className="space-y-5">
-    {showHelp && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10291f]/40 p-4"><Card className="max-w-lg p-6"><h2 className="text-lg font-bold text-[#10291f]">首次使用</h2><p className="mt-3 text-sm leading-6 text-[#587066]">请先进入“导入 Excel/CSV”，选择包含“所有项目进度计划情况”工作表的文件。文件只在浏览器本地解析，不会上传服务器。</p><p className="mt-2 text-sm font-semibold text-[#147154]">本工具数据保存在当前浏览器，不会自动同步到其他电脑。</p><Button className="mt-5" variant="primary" onClick={() => { saveSettings({firstVisitSeen:true}); setShowHelp(false); }}>我知道了</Button></Card></div>}
-    <div className="page-heading flex flex-col gap-3 rounded-2xl border border-[#dbe6e0] bg-white/75 p-5 shadow-[0_10px_30px_rgba(31,72,56,0.05)] lg:flex-row lg:items-center lg:justify-between"><div><h1>仪表盘</h1><p className="mt-1 text-sm">总览与快速处置：聚合需要跟进、延期风险、临期和日期待核对项目。共 {rows.length} 个项目。</p></div><Link className="text-sm font-semibold text-[#147154] hover:underline" href="/projects">进入完整项目管理 →</Link></div>
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[["需要跟进",stats.follow,"text-red-700"],["存在延期风险",stats.risk,"text-orange-700"],[`${windowDays}天内临期`,stats.near,"text-orange-700"],["日期待核对",stats.issue,"text-purple-700"]].map(([label,value,color]) => <Card key={String(label)} className="p-4"><div className="text-sm text-slate-500">{label}</div><div className={`mt-2 text-3xl font-bold ${color}`}>{value}</div></Card>)}</div>
-    <div><Link href="/projects/new"><Button variant="secondary"><FilePlus2 className="h-4 w-4"/>人工录入项目</Button></Link></div>
-    <Card className="p-4"><div className="grid gap-3 md:grid-cols-5"><div className="relative md:col-span-2"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400"/><Input className="pl-9" value={query} onChange={setQuery} placeholder="搜索项目名称 / 编号"/></div><Select value={manager} onChange={setManager} options={[{value:"ALL",label:"全部项目经理"},...managers.map((m) => ({value:m,label:m}))]}/><Select value={team} onChange={setTeam} options={[{value:"ALL",label:"全部项目组"},...TEAMS.map((t) => ({value:t,label:TEAM_LABEL[t]}))]}/><Select value={status} onChange={setStatus} options={[{value:"ALL",label:"全部状态"},{value:"LATE_RISK",label:"有延期风险"},{value:"DATE_ISSUE",label:"日期待核对"},{value:"PENDING_ACTUAL",label:"待补实际日期"},{value:"ACCEPTANCE_LATE",label:"验收延期完成"},{value:"ACCEPTANCE_ON_TIME",label:"按时验收"}]}/></div><div className="mt-3 flex items-center justify-between"><label className="text-sm text-slate-600">临期范围 <select className="ml-2 rounded border px-2 py-1" value={windowDays} onChange={(e) => setWindow(e.target.value)}>{windows.map((w) => <option key={w}>{w}</option>)}</select> 天</label><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => exportRows("xlsx")}>Excel</Button><Button size="sm" variant="secondary" onClick={() => exportRows("csv")}>CSV</Button></div></div></Card>
-    <Card><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b bg-slate-50 text-xs text-slate-500">{["优先级","项目编号","项目名称","项目经理","当前状态","提醒节点","计划日期","时间状态","详情"].map((h) => <th key={h} className="whitespace-nowrap px-3 py-3 font-medium">{h}</th>)}</tr></thead><tbody className="divide-y">{filtered.map((row) => <tr key={row.id} className="hover:bg-slate-50"><td className="px-3 py-3">P{row.priority}</td><td className="px-3 py-3">{row.code}</td><td className="px-3 py-3 font-medium">{row.name}</td><td className="px-3 py-3">{row.pm}</td><td className="px-3 py-3"><StatusBadge status={row.computedStatus}/></td><td className="px-3 py-3">{row.reminderNode}</td><td className="px-3 py-3">{row.plannedDate}</td><td className="px-3 py-3">{row.timeStatus}</td><td className="px-3 py-3"><Link aria-label={`查看${row.name}详情`} title="查看详情" className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#edf5f1] text-[#147154] transition hover:bg-[#dcece5]" href={`/projects/detail?id=${row.id}`}><ChevronRight className="h-5 w-5"/></Link></td></tr>)}{!filtered.length && <tr><td colSpan={9} className="p-10 text-center text-slate-400">暂无符合条件的项目</td></tr>}</tbody></table></div></Card>
-  </div>;
+  const [rows, setRows] = useState<DashboardRow[]>([]);
+  const [showHelp, setShowHelp] = useState(false);
+  const refresh = useCallback(() => setRows(buildDashboardRows()), []);
+
+  useEffect(() => {
+    refresh();
+    if (!getSettings().firstVisitSeen) setShowHelp(true);
+    return subscribe("__all__", refresh);
+  }, [refresh]);
+
+  const stats = useMemo(() => ({
+    total: rows.length,
+    follow: rows.filter((row) => row.needsFollowUp).length,
+    risk: rows.filter((row) => row.status === "LATE_RISK" || row.status === "ACCEPTANCE_LATE").length,
+    accepted: rows.filter((row) => row.accepted).length,
+  }), [rows]);
+  const focusRows = useMemo(() => rows.filter((row) => row.needsFollowUp).slice(0, 6), [rows]);
+  const structure = useMemo(() => buildStructure(rows), [rows]);
+  const windows = useMemo(() => [7, 14, 30, 60].map((days) => ({ days, count: rows.reduce((sum, row) => sum + row.upcomingCounts[days as 7 | 14 | 30 | 60], 0) })), [rows]);
+
+  return (
+    <div className="mx-auto max-w-[1760px] space-y-5">
+      {showHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10291f]/40 p-4">
+          <Card className="max-w-lg p-6">
+            <h2 className="text-lg font-bold text-[#10291f]">首次使用</h2>
+            <p className="mt-3 text-sm leading-6 text-[#587066]">请先导入项目表格，或直接人工录入项目。数据只保存在当前浏览器，不会上传服务器。</p>
+            <Button className="mt-5" variant="primary" onClick={() => { saveSettings({ firstVisitSeen: true }); setShowHelp(false); }}>我知道了</Button>
+          </Card>
+        </div>
+      )}
+
+      <section className="overflow-hidden rounded-3xl border border-[#d7e4dd] bg-gradient-to-br from-[#0d6f52] via-[#147b5b] to-[#2e8d6c] px-6 py-7 text-white shadow-[0_18px_45px_rgba(20,92,68,0.16)] sm:px-8">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-sm text-white/85"><ShieldCheck className="h-4 w-4"/>项目运行总览</div>
+            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">仪表盘</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-base">聚焦需要处理的异常与临期节点；完整查询、筛选、分组和项目维护统一在项目管理中完成。</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/projects/new"><Button className="border-white/25 bg-white text-[#126b50] hover:bg-[#eff8f3]" variant="secondary"><FilePlus2 className="h-4 w-4"/>人工录入</Button></Link>
+            <Link href="/projects" className="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/18">进入项目管理<ArrowRight className="h-4 w-4"/></Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard icon={FolderKanban} label="全部项目" value={stats.total} note="当前项目库" tone="green" />
+        <MetricCard icon={ClipboardList} label="需要处理" value={stats.follow} note="异常、过期或 14 天内临期" tone="red" />
+        <MetricCard icon={AlertTriangle} label="延期风险" value={stats.risk} note="含前置节点风险与验收延期" tone="orange" />
+        <MetricCard icon={CheckCircle2} label="已验收" value={stats.accepted} note={stats.total ? `占全部项目 ${Math.round(stats.accepted / stats.total * 100)}%` : "暂无项目"} tone="teal" />
+      </section>
+
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(330px,.75fr)]">
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[#dbe6e0] px-5 py-4 sm:px-6">
+            <div><h2 className="text-lg font-black text-[#10291f]">优先处理</h2><p className="mt-1 text-sm text-[#73867e]">仅展示优先级最高的 6 个项目</p></div>
+            <Link href="/projects?status=FOLLOW_UP" className="inline-flex items-center gap-1 text-sm font-semibold text-[#147154] hover:underline">查看全部<ArrowRight className="h-4 w-4"/></Link>
+          </div>
+          <div className="divide-y divide-[#e1e9e5]">
+            {focusRows.map((row) => <FocusRow key={row.id} row={row}/>) }
+            {!focusRows.length && <div className="flex min-h-64 flex-col items-center justify-center px-5 text-center"><CheckCircle2 className="h-10 w-10 text-[#54a27f]"/><p className="mt-3 font-bold text-[#23473a]">当前没有需要优先处理的项目</p><p className="mt-1 text-sm text-[#82958e]">新增或修改节点后，这里会自动重新计算。</p></div>}
+          </div>
+        </Card>
+
+        <div className="space-y-5">
+          <Card className="p-5 sm:p-6">
+            <div className="flex items-center gap-2"><CircleAlert className="h-5 w-5 text-[#147154]"/><h2 className="text-lg font-black text-[#10291f]">项目健康结构</h2></div>
+            <div className="mt-6 space-y-4">{structure.map((item) => <HealthBar key={item.label} item={item} total={stats.total}/>)}</div>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="flex items-center gap-2"><CalendarClock className="h-5 w-5 text-[#147154]"/><h2 className="text-lg font-black text-[#10291f]">近期节点压力</h2></div>
+            <p className="mt-1 text-sm text-[#82958e]">统计尚未完成且已有计划日期的节点</p>
+            <div className="mt-5 grid grid-cols-2 gap-3">{windows.map((item) => <div key={item.days} className="rounded-2xl bg-[#f2f7f4] p-4"><div className="text-sm text-[#70847b]">{item.days} 天内</div><div className="mt-1 text-2xl font-black text-[#123d2e]">{item.count}</div></div>)}</div>
+          </Card>
+
+          <div className="rounded-2xl border border-[#cfe1d8] bg-[#edf6f1] p-5 text-sm leading-6 text-[#416358]"><div className="font-bold text-[#174f3b]">数据口径已统一</div>人工录入、Excel 导入或编辑节点后，仪表盘、项目管理、提醒清单、状态确认和项目详情都会使用同一套节点与日期规则立即重算。</div>
+        </div>
+      </div>
+    </div>
+  );
 }
-function download(blob: Blob, name: string) { const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
+
+function MetricCard({ icon: Icon, label, value, note, tone }: { icon: typeof FolderKanban; label: string; value: number; note: string; tone: "green" | "red" | "orange" | "teal" }) {
+  const styles = { green: "bg-[#e6f2ec] text-[#147154]", red: "bg-[#fdeceb] text-[#c94038]", orange: "bg-[#fff0e5] text-[#ca5b24]", teal: "bg-[#e5f3f0] text-[#217f69]" }[tone];
+  return <Card className="p-5"><div className="flex items-start justify-between gap-4"><div><div className="text-sm font-medium text-[#698078]">{label}</div><div className="mt-3 text-3xl font-black text-[#10291f]">{value}</div><div className="mt-2 text-xs text-[#8a9c95]">{note}</div></div><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${styles}`}><Icon className="h-5 w-5"/></span></div></Card>;
+}
+
+function FocusRow({ row }: { row: DashboardRow }) {
+  return <Link href={`/projects/detail?id=${row.id}`} className="group grid gap-3 px-5 py-4 transition hover:bg-[#f6faf8] sm:px-6 lg:grid-cols-[minmax(0,1.4fr)_130px_minmax(180px,.8fr)_36px] lg:items-center"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><StatusBadge status={row.status}/><span className="truncate font-bold text-[#10291f] group-hover:text-[#147154]">{row.name}</span></div><div className="mt-1.5 truncate text-xs text-[#82958e]">{row.code} · {row.managers.join(" / ") || "未指定项目经理"}</div></div><div><div className="text-xs text-[#8b9c95]">当前阶段</div><div className="mt-1 text-sm font-semibold text-[#315548]">{row.phaseLabel}</div></div><div className="min-w-0"><div className="truncate text-sm font-semibold text-[#23473a]">{row.reminderNode} · {row.plannedDate}</div><div className="mt-1 truncate text-xs text-[#c25b32]">{row.timeLabel}</div></div><span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#edf5f1] text-[#147154] transition group-hover:bg-[#d8ebe1]"><ArrowRight className="h-4 w-4"/></span></Link>;
+}
+
+function HealthBar({ item, total }: { item: { label: string; count: number; color: string }; total: number }) {
+  const percent = total ? Math.round(item.count / total * 100) : 0;
+  return <div><div className="mb-1.5 flex items-center justify-between text-sm"><span className="text-[#526b61]">{item.label}</span><span className="font-bold text-[#1b4032]">{item.count} <span className="font-normal text-[#93a29c]">· {percent}%</span></span></div><div className="h-2 overflow-hidden rounded-full bg-[#edf1ee]"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${percent}%` }}/></div></div>;
+}
+
+function buildStructure(rows: DashboardRow[]) {
+  const groups: Array<{ label: string; statuses: ProjectStatus[]; color: string }> = [
+    { label: "正常推进", statuses: ["ON_TRACK", "NOT_STARTED"], color: "bg-[#69aa89]" },
+    { label: "待补实际日期", statuses: ["PENDING_ACTUAL"], color: "bg-[#4d8ec8]" },
+    { label: "延期风险", statuses: ["LATE_RISK", "ACCEPTANCE_LATE"], color: "bg-[#df7040]" },
+    { label: "日期待核对", statuses: ["DATE_ISSUE"], color: "bg-[#8b63b4]" },
+    { label: "按时验收", statuses: ["ACCEPTANCE_ON_TIME"], color: "bg-[#21805e]" },
+  ];
+  return groups.map((group) => ({ ...group, count: rows.filter((row) => group.statuses.includes(row.status)).length }));
+}
